@@ -1,0 +1,116 @@
+'use client';
+
+import { ConnectButton } from '@rainbow-me/rainbowkit';
+import { WalletDashboard } from '@/components/WalletDashboard';
+
+export default function Home() {
+  return (
+    <main className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
+      {/* Header */}
+      <header className="border-b border-gray-200 dark:border-gray-700 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm sticky top-0 z-50">
+        <div className="container mx-auto px-4 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <div className="w-10 h-10 bg-gradient-to-br from-primary-500 to-primary-700 rounded-lg flex items-center justify-center">
+                <span className="text-white font-bold text-xl">K</span>
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold">KIK Wallet</h1>
+                <p className="text-xs text-gray-600 dark:text-gray-400">Polygon Network</p>
+              </div>
+            </div>
+            <ConnectButton />
+          </div>
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <div className="container mx-auto px-4 py-8">
+        <div className="max-w-4xl mx-auto">
+          {/* Welcome Section */}
+          <div className="text-center mb-8">
+            <h2 className="text-4xl font-bold mb-4">
+              Добро пожаловать в KIK Wallet
+            </h2>
+            <p className="text-lg text-gray-600 dark:text-gray-400">
+              Управляйте своими KIK токенами на Polygon блокчейне
+            </p>
+          </div>
+
+          {/* Features Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div className="card text-center">
+              <div className="text-4xl mb-3">⚡</div>
+              <h3 className="font-bold mb-2">Быстро</h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Транзакции за секунды на Polygon
+              </p>
+            </div>
+            <div className="card text-center">
+              <div className="text-4xl mb-3">💰</div>
+              <h3 className="font-bold mb-2">Дёшево</h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Минимальные комиссии ~$0.01
+              </p>
+            </div>
+            <div className="card text-center">
+              <div className="text-4xl mb-3">🔒</div>
+              <h3 className="font-bold mb-2">Безопасно</h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Ваши ключи - ваши монеты
+              </p>
+            </div>
+          </div>
+
+          {/* Wallet Dashboard */}
+          <WalletDashboard />
+
+          {/* Info Section */}
+          <div className="mt-8 card bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+            <h3 className="font-bold mb-2">ℹ️ Информация</h3>
+            <ul className="space-y-2 text-sm text-gray-700 dark:text-gray-300">
+              <li>• Всегда проверяйте адрес получателя перед отправкой</li>
+              <li>• Храните свой seed phrase в безопасном месте</li>
+              <li>• Никогда не делитесь своим приватным ключом</li>
+              <li>• Используйте тестовую сеть для экспериментов</li>
+            </ul>
+          </div>
+
+          {/* Links */}
+          <div className="mt-8 text-center space-y-2">
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              <a 
+                href="https://polygonscan.com" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-primary-600 hover:text-primary-700 underline"
+              >
+                Просмотр на Polygonscan
+              </a>
+            </p>
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              <a 
+                href="https://faucet.polygon.technology" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-primary-600 hover:text-primary-700 underline"
+              >
+                Получить тестовый MATIC
+              </a>
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Footer */}
+      <footer className="border-t border-gray-200 dark:border-gray-700 mt-16 py-8">
+        <div className="container mx-auto px-4 text-center text-sm text-gray-600 dark:text-gray-400">
+          <p>© 2024 KIK Wallet. Создано на Polygon блокчейне.</p>
+          <p className="mt-2">
+            Открытый исходный код • Децентрализованный • Безопасный
+          </p>
+        </div>
+      </footer>
+    </main>
+  );
+}

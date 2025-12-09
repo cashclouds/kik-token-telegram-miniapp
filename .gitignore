@@ -1,0 +1,44 @@
+# Node modules
+node_modules/
+
+# Hardhat/artifacts
+artifacts/
+cache/
+
+# Deployment outputs
+deployments/
+
+# Build outputs
+build/
+.next/
+wallet-app/.next/
+
+# Environment files
+.env
+*.env
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+
+# OneDrive temp
+~$*
+
+# Ignore compiled contracts
+*.dbg.json
+
+# Ignore local wallet/mnemonic files
+*.key
+*.secret
+
+# Ignore coverage
+coverage/

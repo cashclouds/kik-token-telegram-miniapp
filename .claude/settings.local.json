@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(test:*)",
+      "Bash(cat:*)",
+      "Bash(npm install)",
+      "Bash(npm run compile:*)",
+      "Bash(npm run deploy:amoy:*)",
+      "Bash(npm run dev:*)",
+      "Bash(npm install:*)",
+      "Bash(find:*)",
+      "Bash(grep:*)",
+      "Bash(npx hardhat test:*)",
+      "Bash(npm run deploy:amoy:merkle:*)",
+      "Bash(npx hardhat verify:*)",
+      "Bash(npm run test:merkle:*)",
+      "Bash(npm run deploy:amoy:pool:*)",
+      "Bash(npm run deploy:amoy:pool:lite:*)",
+      "Bash(npm run test:pool:*)",
+      "Bash(dir:*)",
+      "Bash(xcopy:*)",
+      "Bash(robocopy:*)",
+      "Bash(powershell:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

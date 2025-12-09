@@ -1,0 +1,51 @@
+{
+  "name": "kik-collectibles",
+  "version": "3.0.0",
+  "description": "KIK Collectibles - Telegram NFT collectibles with referral rewards",
+  "main": "index.js",
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "test:token": "hardhat test test/KIKTokenV3.test.js",
+    "test:v2": "hardhat test test/KIKTokenV2.test.js",
+    "test:merkle": "hardhat test test/MerkleTreeManager.test.js",
+    "test:pool": "hardhat test test/AnonymousPool.test.js",
+    "test:burning": "hardhat test test/BurningSystem.test.js",
+    "test:nft": "hardhat test test/CollectiblesNFT.test.js",
+    "test:marketplace": "hardhat test test/Marketplace.test.js",
+    "test:referral": "hardhat test test/ReferralSystem.test.js",
+    "test:rewards": "hardhat test test/RewardDistributor.test.js",
+    "deploy:local": "hardhat run scripts/deploy-collectibles.js --network hardhat",
+    "deploy:amoy": "hardhat run scripts/deploy-collectibles.js --network amoy",
+    "deploy:remaining": "hardhat run scripts/deploy-remaining.js --network amoy",
+    "deploy:step": "hardhat run scripts/deploy-step-by-step.js --network amoy",
+    "post:deploy": "node scripts/post-deploy.js",
+    "deploy:full": "npm run deploy:amoy && npm run post:deploy",
+    "deploy:amoy:pool": "hardhat run scripts/deploy-pool.js --network amoy",
+    "deploy:amoy:pool:lite": "hardhat run scripts/deploy-pool-lite.js --network amoy",
+    "deploy:amoy:burning": "hardhat run scripts/deploy-burning-system.js --network amoy",
+    "deploy:polygon": "hardhat run scripts/deploy-collectibles.js --network polygon",
+    "verify": "hardhat verify --network polygon",
+    "clean": "hardhat clean"
+  },
+  "keywords": [
+    "ethereum",
+    "polygon",
+    "erc20",
+    "nft",
+    "telegram",
+    "collectibles",
+    "referral",
+    "rewards"
+  ],
+  "author": "KIK Team",
+  "license": "MIT",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^4.0.0",
+    "hardhat": "^2.19.0"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.0.0",
+    "dotenv": "^16.3.1"
+  }
+}
