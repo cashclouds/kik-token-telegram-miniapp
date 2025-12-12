@@ -17,7 +17,7 @@ class ReferralService {
 
   /**
    * Register user with referral code
-   * NEW: Awards +1 token to referrer immediately
+   * UPDATED: Awards +1 token to referrer immediately (one-time)
    */
   async registerReferral(userId, referredByCode) {
     if (!referredByCode) {
@@ -81,6 +81,7 @@ class ReferralService {
 
   /**
    * Get user's referral stats
+   * UPDATED: Include timer information for referral bonuses
    */
   async getReferralStats(userId) {
     const data = this.referrals.get(userId);
@@ -89,14 +90,39 @@ class ReferralService {
       return {
         referralCode: null,
         directReferrals: 0,
-        totalEarnings: 0
+        totalEarnings: 0,
+        referralTimers: []
       };
+    }
+
+    // Get timer information for each referral
+    const inMemoryDB = db.getInMemoryData();
+    const userStats = inMemoryDB.userStats.get(userId);
+    const referralTimers = [];
+
+    if (userStats?.activeReferrals) {
+      const tokenService = require('./tokenService');
+
+      for (const referralId of userStats.activeReferrals) {
+        const referralStats = inMemoryDB.userStats.get(referralId);
+        if (referralStats?.lastPictureAttached) {
+          const lastAttachmentTime = new Date(referralStats.lastPictureAttached);
+          const availableAt = new Date(lastAttachmentTime.getTime() + 24 * 60 * 60 * 1000);
+          referralTimers.push({
+            referralId,
+            availableAt,
+            isAvailable: new Date() >= availableAt,
+            hoursLeft: Math.ceil((availableAt - new Date()) / (60 * 60 * 1000))
+          });
+        }
+      }
     }
 
     return {
       referralCode: data.referralCode,
       directReferrals: data.referrals.length,
-      totalEarnings: data.referrals.length * 1000 // 1000 KIK per referral (mock)
+      totalEarnings: data.referrals.length * 1000, // 1000 KIK per referral (mock)
+      referralTimers
     };
   }
 

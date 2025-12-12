@@ -19,6 +19,7 @@
     "deploy:amoy": "hardhat run scripts/deploy-collectibles.js --network amoy",
     "deploy:remaining": "hardhat run scripts/deploy-remaining.js --network amoy",
     "deploy:step": "hardhat run scripts/deploy-step-by-step.js --network amoy",
+    "deploy:one-by-one": "hardhat run scripts/deploy-one-by-one.js --network amoy",
     "post:deploy": "node scripts/post-deploy.js",
     "deploy:full": "npm run deploy:amoy && npm run post:deploy",
     "deploy:amoy:pool": "hardhat run scripts/deploy-pool.js --network amoy",

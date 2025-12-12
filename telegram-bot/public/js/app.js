@@ -37,6 +37,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Setup event listeners
     setupEventListeners();
 
+    // FIX: Initialize sticky header
+    initStickyHeader();
+
     // Hide loading, show app
     document.getElementById('loading').style.display = 'none';
     document.getElementById('app').style.display = 'block';
@@ -49,6 +52,45 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 // ============================================
+// STICKY HEADER FIX
+// ============================================
+
+function initStickyHeader() {
+    const tabs = document.querySelector('.tabs');
+    const header = document.querySelector('.header');
+
+    if (!tabs || !header) return;
+
+    // Calculate header height
+    const headerHeight = header.offsetHeight;
+
+    // Set sticky position
+    tabs.style.top = `${headerHeight}px`;
+
+    // Add scroll event listener for smooth transitions
+    window.addEventListener('scroll', () => {
+        if (window.scrollY > headerHeight) {
+            tabs.classList.add('sticky');
+        } else {
+            tabs.classList.remove('sticky');
+        }
+    });
+
+    // Add placeholder to prevent content jump
+    const placeholder = document.createElement('div');
+    placeholder.className = 'tabs-sticky-placeholder';
+    placeholder.style.height = `${tabs.offsetHeight}px`;
+    tabs.parentNode.insertBefore(placeholder, tabs);
+
+    // Update on resize
+    window.addEventListener('resize', () => {
+        const newHeaderHeight = header.offsetHeight;
+        tabs.style.top = `${newHeaderHeight}px`;
+        placeholder.style.height = `${tabs.offsetHeight}px`;
+    });
+}
+
+// ============================================
 // DATA LOADING
 // ============================================
 
@@ -56,7 +98,15 @@ async function loadUserData() {
     try {
         const userId = tg?.initDataUnsafe?.user?.id || 'demo';
 
-        const response = await fetch(`/api/user/${userId}`);
+        // Add timeout to prevent hanging
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+
+        const response = await fetch(`/api/user/${userId}`, {
+            signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+
         if (!response.ok) throw new Error('Failed to load user data');
 
         const data = await response.json();
@@ -86,9 +136,17 @@ async function loadUserData() {
                 total: 0,
                 active: 0,
                 earned: 0
-            }
+            },
+            pictures: [],
+            referralCode: 'DEMO123'
         };
+        
+        // Update all UI sections with demo data
         updateUserUI();
+        updateStatsUI();
+        updateCollectionUI();
+        updateInviteUI();
+        updateProfileUI();
     }
 }
 
@@ -230,6 +288,15 @@ function setupEventListeners() {
     document.getElementById('cancelAIBtn')?.addEventListener('click', closeAIModal);
     document.getElementById('generateNowBtn')?.addEventListener('click', handleAIGenerate);
 
+    // Upload Modal
+    document.getElementById('closeUploadModal')?.addEventListener('click', closeUploadModal);
+    document.getElementById('cancelUploadBtn')?.addEventListener('click', closeUploadModal);
+    document.getElementById('cameraBtn')?.addEventListener('click', handleCameraUpload);
+    document.getElementById('galleryBtn')?.addEventListener('click', handleGalleryUpload);
+    document.getElementById('confirmUploadBtn')?.addEventListener('click', handleConfirmUpload);
+    document.getElementById('privateBtn')?.addEventListener('click', () => setPrivacy('private'));
+    document.getElementById('publicBtn')?.addEventListener('click', () => setPrivacy('public'));
+
     // Example tags
     document.querySelectorAll('.tag').forEach(tag => {
         tag.addEventListener('click', () => {
@@ -282,7 +349,19 @@ async function handleDailyClaim() {
             showNotification(window.i18n.t('claim_success', currentLang), 'success');
             await loadUserData(); // Reload user data
         } else {
-            showNotification(data.message || window.i18n.t('claim_error', currentLang), 'error');
+            // Translate error messages from backend
+            let errorMsg = window.i18n.t('claim_error', currentLang);
+            
+            // Check for specific error reasons
+            if (data.message) {
+                if (data.message.includes('already claimed')) {
+                    errorMsg = window.i18n.t('claim_already', currentLang);
+                } else if (data.message.includes('attach') || data.message.includes('pictures')) {
+                    errorMsg = window.i18n.t('claim_not_available', currentLang);
+                }
+            }
+            
+            showNotification(errorMsg, 'error');
         }
 
     } catch (error) {
@@ -292,23 +371,135 @@ async function handleDailyClaim() {
 }
 
 // ============================================
-// UPLOAD PHOTO
+// UPLOAD PHOTO - NEW IMPLEMENTATION
 // ============================================
 
-function handleUploadPhoto() {
-    // Telegram API for photo upload
-    if (tg) {
-        tg.showPopup({
-            title: window.i18n.t('upload_photo', currentLang),
-            message: 'Take a photo or choose from gallery',
-            buttons: [
-                { type: 'default', text: 'Camera' },
-                { type: 'default', text: 'Gallery' },
-                { type: 'cancel' }
-            ]
+async function handleUploadPhoto() {
+    try {
+        const userId = tg?.initDataUnsafe?.user?.id || 'demo';
+
+        // Check if user has unattached tokens
+        if (!currentUser || currentUser.tokens.unattached === 0) {
+            showNotification(window.i18n.t('claim_not_available', currentLang), 'error');
+            return;
+        }
+
+        // Show upload modal
+        document.getElementById('uploadModal').classList.add('active');
+
+    } catch (error) {
+        console.error('Upload photo error:', error);
+        showNotification(window.i18n.t('claim_error', currentLang), 'error');
+    }
+}
+
+function closeUploadModal() {
+    document.getElementById('uploadModal').classList.remove('active');
+    document.getElementById('uploadPreview').style.display = 'none';
+    document.getElementById('previewImage').src = '';
+}
+
+async function handleCameraUpload() {
+    try {
+        if (!tg) {
+            showNotification('Camera available only in Telegram app', 'error');
+            return;
+        }
+
+        // Use Telegram WebApp API to access camera
+        const photo = await tg.requestCameraAccess();
+        if (photo) {
+            showUploadPreview(photo);
+        }
+
+    } catch (error) {
+        console.error('Camera access error:', error);
+        showNotification('Failed to access camera', 'error');
+    }
+}
+
+async function handleGalleryUpload() {
+    try {
+        if (!tg) {
+            showNotification('Gallery available only in Telegram app', 'error');
+            return;
+        }
+
+        // Use Telegram WebApp API to access gallery
+        const photo = await tg.requestGalleryAccess();
+        if (photo) {
+            showUploadPreview(photo);
+        }
+
+    } catch (error) {
+        console.error('Gallery access error:', error);
+        showNotification('Failed to access gallery', 'error');
+    }
+}
+
+function showUploadPreview(photoData) {
+    const preview = document.getElementById('uploadPreview');
+    const previewImage = document.getElementById('previewImage');
+
+    // Set preview image
+    previewImage.src = photoData;
+    preview.style.display = 'block';
+
+    // Store photo data for upload
+    window.currentPhotoData = photoData;
+}
+
+function setPrivacy(privacy) {
+    // Update privacy buttons
+    document.getElementById('privateBtn').classList.remove('active');
+    document.getElementById('publicBtn').classList.remove('active');
+    document.getElementById(`${privacy}Btn`).classList.add('active');
+
+    // Store privacy setting
+    window.currentPhotoPrivacy = privacy;
+}
+
+async function handleConfirmUpload() {
+    try {
+        if (!window.currentPhotoData) {
+            showNotification('No photo selected', 'error');
+            return;
+        }
+
+        if (!window.currentPhotoPrivacy) {
+            showNotification('Please select privacy setting', 'error');
+            return;
+        }
+
+        const userId = tg?.initDataUnsafe?.user?.id || 'demo';
+
+        // Show loading
+        showNotification('Uploading photo...', 'info');
+
+        // Upload photo to server
+        const response = await fetch('/api/upload-photo', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                userId,
+                photoData: window.currentPhotoData,
+                isPrivate: window.currentPhotoPrivacy === 'private'
+            })
         });
-    } else {
-        showNotification('Photo upload available only in Telegram', 'info');
+
+        const data = await response.json();
+
+        if (data.success) {
+            showNotification('Photo uploaded successfully!', 'success');
+            closeUploadModal();
+            await loadUserData(); // Reload user data
+        } else {
+            showNotification(data.message || 'Failed to upload photo', 'error');
+        }
+
+    } catch (error) {
+        console.error('Upload error:', error);
+        showNotification('Failed to upload photo', 'error');
     }
 }
 
@@ -329,12 +520,15 @@ async function handleAIGenerate() {
     const prompt = document.getElementById('aiPrompt').value.trim();
 
     if (!prompt) {
-        showNotification('Please enter a prompt', 'error');
+        showNotification(window.i18n.t('ai_prompt_hint', currentLang), 'error');
         return;
     }
 
     try {
         const userId = tg?.initDataUnsafe?.user?.id || 'demo';
+
+        // Show loading
+        showNotification('Generating...', 'info');
 
         const response = await fetch('/api/generate-ai', {
             method: 'POST',
@@ -349,12 +543,12 @@ async function handleAIGenerate() {
             closeAIModal();
             await loadUserData(); // Reload to show new picture
         } else {
-            showNotification('Failed to generate image', 'error');
+            showNotification(window.i18n.t('claim_error', currentLang), 'error');
         }
 
     } catch (error) {
         console.error('AI generation error:', error);
-        showNotification('Failed to generate image', 'error');
+        showNotification(window.i18n.t('claim_error', currentLang), 'error');
     }
 }
 

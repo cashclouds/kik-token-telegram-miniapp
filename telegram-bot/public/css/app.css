@@ -87,6 +87,19 @@
     /* Glass Effect */
     --glass-blur: blur(20px);
     --glass-bg: rgba(30, 30, 46, 0.6);
+
+    /* Primary Colors (Nintendo Blue) */
+    --primary: #007AFF;
+    --primary-dark: #0051D5;
+    --secondary: #5856D6;
+
+    /* Border Radius */
+    --border-radius-small: 12px;
+
+    /* Shadows */
+    --shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+    --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.2);
+    --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.4);
 }
 
 /* ============================================
@@ -273,7 +286,7 @@ body::before {
 }
 
 /* ============================================
-   Navigation Tabs
+   Navigation Tabs - FIXED STICKY HEADER
    ============================================ */
 
 .tabs {
@@ -287,8 +300,70 @@ body::before {
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
     position: sticky;
-    top: 100px;
-    z-index: 99;
+    top: 0;
+    z-index: 100;
+    margin-top: 0;
+    transition: all 0.3s ease;
+    box-shadow: var(--shadow-soft);
+}
+
+.tabs::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 100%;
+    background: var(--glass-bg);
+    backdrop-filter: var(--glass-blur);
+    z-index: -1;
+}
+
+/* Sticky header container fix */
+.app {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+.header {
+    position: relative;
+    z-index: 101;
+}
+
+.content {
+    flex: 1;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.tab-content {
+    padding-top: var(--spacing-lg);
+    margin-top: 0;
+}
+
+/* Sticky header animation */
+.tabs.sticky {
+    transform: translateY(0);
+    opacity: 1;
+}
+
+.tabs.sticky-placeholder {
+    height: 60px;
+    width: 100%;
+}
+
+/* Mobile sticky fix */
+@media (max-width: 480px) {
+    .tabs {
+        top: 0;
+        position: sticky;
+    }
+
+    .content {
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+    }
 }
 
 .tabs::-webkit-scrollbar {
@@ -994,6 +1069,33 @@ body::before {
 .tag:hover {
     background: var(--primary);
     color: white;
+}
+
+/* Upload Modal Specific Styles */
+.upload-options {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+    margin-bottom: var(--spacing-lg);
+}
+
+.preview-image {
+    max-width: 100%;
+    border-radius: var(--border-radius);
+    margin: var(--spacing-md) 0;
+    box-shadow: var(--shadow);
+}
+
+.privacy-choice {
+    margin-top: var(--spacing-lg);
+    padding-top: var(--spacing-lg);
+    border-top: 1px solid var(--bg-secondary);
+}
+
+.btn.active {
+    background: var(--primary);
+    color: white;
+    border-color: var(--primary);
 }
 
 /* ============================================

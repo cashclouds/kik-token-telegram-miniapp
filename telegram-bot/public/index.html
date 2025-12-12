@@ -9,7 +9,7 @@
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
 
     <!-- Styles -->
-    <link rel="stylesheet" href="/css/app.css">
+    <link rel="stylesheet" href="css/app.css">
 
     <!-- i18n -->
     <script src="https://cdn.jsdelivr.net/npm/i18next@23.7.6/i18next.min.js"></script>
@@ -181,10 +181,22 @@
                                 <option value="en">🇬🇧 English</option>
                                 <option value="ru">🇷🇺 Русский</option>
                                 <option value="es">🇪🇸 Español</option>
+                                <option value="fr">🇫🇷 Français</option>
+                                <option value="de">🇩🇪 Deutsch</option>
+                                <option value="it">🇮🇹 Italiano</option>
+                                <option value="pl">🇵🇱 Polski</option>
+                                <option value="uk">🇺🇦 Українська</option>
+                                <option value="tr">🇹🇷 Türkçe</option>
+                                <option value="nl">🇳🇱 Nederlands</option>
+                                <option value="sv">🇸🇪 Svenska</option>
+                                <option value="cs">🇨🇿 Čeština</option>
+                                <option value="ro">🇷🇴 Română</option>
+                                <option value="el">🇬🇷 Ελληνικά</option>
+                                <option value="hu">🇭🇺 Magyar</option>
+                                <option value="pt">🇵🇹 Português</option>
                                 <option value="zh">🇨🇳 中文</option>
                                 <option value="hi">🇮🇳 हिन्दी</option>
                                 <option value="ar">🇦🇪 العربية</option>
-                                <option value="pt">🇵🇹 Português</option>
                                 <option value="bn">🇧🇩 বাংলা</option>
                                 <option value="id">🇮🇩 Bahasa Indonesia</option>
                                 <option value="ja">🇯🇵 日本語</option>
@@ -244,8 +256,43 @@
         </div>
     </div>
 
+    <!-- Photo Upload Modal -->
+    <div id="uploadModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 data-i18n="upload_photo">Upload Photo</h2>
+                <button class="modal-close" id="closeUploadModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="upload-options">
+                    <button class="btn btn-secondary btn-large" id="cameraBtn">
+                        📷 <span data-i18n="take_photo">Take Photo</span>
+                    </button>
+                    <button class="btn btn-secondary btn-large" id="galleryBtn">
+                        📸 <span data-i18n="choose_gallery">Choose from Gallery</span>
+                    </button>
+                </div>
+                <div class="upload-preview" id="uploadPreview" style="display: none;">
+                    <h3 data-i18n="preview">Preview</h3>
+                    <img id="previewImage" class="preview-image" style="max-width: 100%; border-radius: var(--border-radius);">
+                    <div class="privacy-choice">
+                        <h4 data-i18n="privacy_settings">Privacy Settings</h4>
+                        <div class="btn-group">
+                            <button class="btn btn-secondary" id="privateBtn" data-i18n="private">Private</button>
+                            <button class="btn btn-secondary" id="publicBtn" data-i18n="public">Public</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="cancelUploadBtn" data-i18n="cancel">Cancel</button>
+                <button class="btn btn-primary" id="confirmUploadBtn" data-i18n="confirm">Confirm</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Scripts -->
-    <script src="/js/i18n.js"></script>
-    <script src="/js/app.js"></script>
+    <script src="js/i18n.js"></script>
+    <script src="js/app.js"></script>
 </body>
 </html>

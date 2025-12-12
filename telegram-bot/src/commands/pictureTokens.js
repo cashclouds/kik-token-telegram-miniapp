@@ -1,7 +1,7 @@
 /**
- * Picture Tokens Commands - NEW CONCEPT
+ * Picture Tokens Commands - MULTILINGUAL VERSION
  *
- * Main bot commands for the new Picture Tokens game
+ * Main bot commands with full i18n support for all European languages
  */
 
 const { Markup } = require('telegraf');
@@ -9,6 +9,7 @@ const logger = require('../utils/logger');
 const tokenService = require('../services/tokenService');
 const pictureService = require('../services/pictureService');
 const referralService = require('../services/referralService');
+const { getTranslator, detectLanguage, getLanguageKeyboard, LANGUAGE_NAMES } = require('../utils/i18n');
 
 // ============================================
 // COMMAND: /start
@@ -17,7 +18,12 @@ const referralService = require('../services/referralService');
 async function startCommand(ctx) {
   try {
     const userId = ctx.user.id;
-    const username = ctx.user.username || 'there';
+    const username = ctx.user.username || ctx.user.first_name || 'there';
+    
+    // Detect and set user language
+    const userLang = detectLanguage(ctx);
+    ctx.user.language = userLang;
+    const t = getTranslator(userLang);
 
     // Check for referral code
     const referralCode = ctx.message?.text.split(' ')[1];
@@ -27,7 +33,7 @@ async function startCommand(ctx) {
       const result = await referralService.registerReferral(userId, referralCode);
 
       if (result.success && result.referrer) {
-        await ctx.reply(`✅ You joined using a referral link! Your friend got a bonus token.`);
+        await ctx.reply(t('welcome.referral_joined'));
       }
     } else {
       // User joined without referral - register anyway
@@ -37,25 +43,36 @@ async function startCommand(ctx) {
     // Give user 3 starting tokens
     const claimResult = await tokenService.claimDailyTokens(userId);
 
-    const welcomeMessage = `🎮 Welcome to KIK Picture Tokens, ${username}!
+    const welcomeMessage = `${t('welcome.title', { username })}\n\n${t('welcome.received_tokens', { count: claimResult.tokens.length })}\n\n${t('welcome.how_it_works')}\n${t('welcome.step1')}\n${t('welcome.step2')}\n${t('welcome.step3')}\n${t('welcome.step4')}\n\n${t('welcome.first_task')}\n${t('welcome.first_task_desc', { count: claimResult.tokens.length })}`;
 
-🎁 You've received ${claimResult.tokens.length} KIK tokens!
+    await ctx.reply(welcomeMessage, getMainMenu(t));
 
-🎨 **How it works:**
-• Each token needs a picture (upload or AI generate)
-• Attach pictures to ALL your tokens to get 3 more tomorrow
-• Invite friends and earn bonus tokens daily
-• Collect, trade, and level up!
-
-**Your First Task:**
-Attach pictures to your ${claimResult.tokens.length} tokens to get more tomorrow! 👇`;
-
-    await ctx.reply(welcomeMessage, getMainMenu());
-
-    logger.info(`User ${userId} started bot, received ${claimResult.tokens.length} tokens`);
+    logger.info(`User ${userId} started bot (${userLang}), received ${claimResult.tokens.length} tokens`);
   } catch (error) {
     logger.error('Start command error:', error);
-    await ctx.reply('❌ Something went wrong. Please try again.');
+    const t = getTranslator(detectLanguage(ctx));
+    await ctx.reply(t('errors.general'));
+  }
+}
+
+// ============================================
+// COMMAND: /about
+// ============================================
+
+async function aboutCommand(ctx) {
+  try {
+    const userLang = ctx.user?.language || detectLanguage(ctx);
+    const t = getTranslator(userLang);
+
+    const aboutMessage = `${t('about.title')}\n\n${t('about.description')}\n\n${t('about.what_you_get')}\n${t('about.benefit1')}\n${t('about.benefit2')}\n${t('about.benefit3')}\n${t('about.benefit4')}\n${t('about.benefit5')}\n\n${t('about.why_cool')}\n${t('about.cool1')}\n${t('about.cool2')}\n${t('about.cool3')}\n${t('about.cool4')}\n${t('about.cool5')}\n${t('about.cool6')}\n\n${t('about.how_help')}\n${t('about.help1')}\n${t('about.help2')}\n${t('about.help3')}\n${t('about.help4')}\n${t('about.help5')}\n\n${t('about.tokenomics')}\n${t('about.total_supply')}\n${t('about.distribution')}\n\n${t('about.cta')}`;
+
+    await ctx.reply(aboutMessage, getMainMenu(t));
+    
+    logger.info(`User ${ctx.user.id} viewed about page (${userLang})`);
+  } catch (error) {
+    logger.error('About command error:', error);
+    const t = getTranslator(detectLanguage(ctx));
+    await ctx.reply(t('errors.general'));
   }
 }
 
@@ -66,13 +83,25 @@ Attach pictures to your ${claimResult.tokens.length} tokens to get more tomorrow
 async function dailyCommand(ctx) {
   try {
     const userId = ctx.user.id;
+    const userLang = ctx.user?.language || detectLanguage(ctx);
+    const t = getTranslator(userLang);
 
     // Check eligibility
     const eligibility = await tokenService.checkEligibility(userId);
 
     if (!eligibility.eligible) {
-      const message = tokenService._getEligibilityMessage(eligibility);
-      return await ctx.reply(`⏳ **Daily Tokens**\n\n${message}`);
+      // NEW: Show timer information if available
+      let message = `${t('daily.title')}\n\n${t('daily.not_eligible')}`;
+
+      if (eligibility.reason === 'timer_not_expired' && eligibility.nextAvailableAt) {
+        const timerInfo = tokenService.getUserTimerInfo(userId);
+        message += `\n\n${t('daily.timer_info', {
+          hours: timerInfo.hoursLeft,
+          time: eligibility.nextAvailableAt.toLocaleTimeString()
+        })}`;
+      }
+
+      return await ctx.reply(message);
     }
 
     // Claim daily tokens
@@ -81,20 +110,35 @@ async function dailyCommand(ctx) {
     // Also check for referral bonus
     const referralBonus = await tokenService.getReferralBonus(userId);
 
-    let message = `✅ **Daily Tokens Claimed!**\n\n🎁 You received ${claimResult.tokens.length} tokens`;
+    let message = `${t('daily.claimed')}\n\n${t('daily.received', { count: claimResult.tokens.length })}`;
 
     if (referralBonus.tokens > 0) {
-      message += `\n🌟 BONUS: +${referralBonus.tokens} tokens from active referrals!`;
+      message += `\n${t('daily.bonus', { count: referralBonus.tokens })}`;
     }
 
-    message += `\n\n📊 **Remember:**\nAttach pictures to ALL tokens to get more tomorrow!`;
+    // NEW: Show referral timer information
+    if (referralBonus.timers && referralBonus.timers.length > 0) {
+      const pendingTimers = referralBonus.timers.filter(timer => !timer.isAvailable);
+      if (pendingTimers.length > 0) {
+        message += `\n\n${t('daily.referral_timers_title')}`;
+        pendingTimers.forEach(timer => {
+          message += `\n${t('daily.referral_timer', {
+            hours: timer.hoursLeft,
+            time: timer.availableAt.toLocaleTimeString()
+          })}`;
+        });
+      }
+    }
 
-    await ctx.reply(message, getMainMenu());
+    message += `\n\n${t('daily.remember')}`;
 
-    logger.info(`User ${userId} claimed daily tokens: ${claimResult.tokens.length + referralBonus.tokens} total`);
+    await ctx.reply(message, getMainMenu(t));
+
+    logger.info(`User ${userId} claimed daily tokens: ${claimResult.tokens.length + referralBonus.tokens} total (${userLang})`);
   } catch (error) {
     logger.error('Daily command error:', error);
-    await ctx.reply('❌ Something went wrong. Please try again.');
+    const t = getTranslator(detectLanguage(ctx));
+    await ctx.reply(t('errors.general'));
   }
 }
 
@@ -105,30 +149,33 @@ async function dailyCommand(ctx) {
 async function attachCommand(ctx) {
   try {
     const userId = ctx.user.id;
+    const userLang = ctx.user?.language || detectLanguage(ctx);
+    const t = getTranslator(userLang);
 
     // Get unattached tokens
     const unattachedTokens = tokenService.getUserTokens(userId, true);
 
     if (unattachedTokens.length === 0) {
-      return await ctx.reply(`✅ All your tokens have pictures!\n\nClaim more tokens tomorrow with /daily`);
+      return await ctx.reply(t('attach.all_attached'));
     }
 
-    const message = `🎨 **Attach Pictures**\n\nYou have ${unattachedTokens.length} tokens without pictures.\n\nChoose how to add a picture:`;
+    const message = `${t('attach.title')}\n\n${t('attach.count', { count: unattachedTokens.length })}\n\n${t('attach.choose')}`;
 
     await ctx.reply(message, {
       reply_markup: {
         inline_keyboard: [
           [
-            { text: '📸 Upload Photo', callback_data: 'attach_upload' },
-            { text: '🤖 Generate AI', callback_data: 'attach_ai' }
+            { text: t('buttons.upload_photo'), callback_data: 'attach_upload' },
+            { text: t('buttons.generate_ai'), callback_data: 'attach_ai' }
           ],
-          [{ text: '« Back', callback_data: 'main_menu' }]
+          [{ text: t('buttons.back'), callback_data: 'main_menu' }]
         ]
       }
     });
   } catch (error) {
     logger.error('Attach command error:', error);
-    await ctx.reply('❌ Something went wrong. Please try again.');
+    const t = getTranslator(detectLanguage(ctx));
+    await ctx.reply(t('errors.general'));
   }
 }
 
@@ -139,36 +186,28 @@ async function attachCommand(ctx) {
 async function collectionCommand(ctx) {
   try {
     const userId = ctx.user.id;
+    const userLang = ctx.user?.language || detectLanguage(ctx);
+    const t = getTranslator(userLang);
 
     const stats = pictureService.getUserStats(userId);
-    const userStats = tokenService.getUserTokens(userId);
 
-    const message = `📸 **Your Collection**
-
-🎁 Total Tokens: ${stats.totalTokens}
-✅ With Pictures: ${stats.attached}
-⏳ Without Pictures: ${stats.unattached}
-
-🔒 Private Pictures: ${stats.privatePictures}
-🌍 Public Pictures: ${stats.publicPictures}
-
-👤 Level: ${ctx.user.level || 1}
-⭐ Experience: ${ctx.user.experience || 0} XP`;
+    const message = `${t('collection.title')}\n\n${t('collection.total_tokens', { count: stats.totalTokens })}\n${t('collection.with_pictures', { count: stats.attached })}\n${t('collection.without_pictures', { count: stats.unattached })}\n\n${t('collection.private_pictures', { count: stats.privatePictures })}\n${t('collection.public_pictures', { count: stats.publicPictures })}\n\n${t('collection.level', { level: ctx.user.level || 1 })}\n${t('collection.experience', { xp: ctx.user.experience || 0 })}`;
 
     await ctx.reply(message, {
       reply_markup: {
         inline_keyboard: [
           [
-            { text: '🎨 Attach More', callback_data: 'attach_upload' },
-            { text: '👀 View All', callback_data: 'view_collection' }
+            { text: t('buttons.attach_more'), callback_data: 'attach_upload' },
+            { text: t('buttons.view_all'), callback_data: 'view_collection' }
           ],
-          [{ text: '« Back', callback_data: 'main_menu' }]
+          [{ text: t('buttons.back'), callback_data: 'main_menu' }]
         ]
       }
     });
   } catch (error) {
     logger.error('Collection command error:', error);
-    await ctx.reply('❌ Something went wrong. Please try again.');
+    const t = getTranslator(detectLanguage(ctx));
+    await ctx.reply(t('errors.general'));
   }
 }
 
@@ -179,35 +218,64 @@ async function collectionCommand(ctx) {
 async function inviteCommand(ctx) {
   try {
     const userId = ctx.user.id;
+    const userLang = ctx.user?.language || detectLanguage(ctx);
+    const t = getTranslator(userLang);
 
     const stats = await referralService.getReferralStats(userId);
     const botUsername = ctx.botInfo.username;
     const referralLink = referralService.getReferralLink(stats.referralCode, botUsername);
 
-    const message = `👥 **Invite Friends**
+    let message = `${t('invite.title')}\n\n${t('invite.your_link')}\n${referralLink}\n\n${t('invite.rewards_title')}\n${t('invite.reward1')}\n${t('invite.reward2')}\n\n${t('invite.stats_title')}\n${t('invite.referrals', { count: stats.directReferrals })}\n${t('invite.total_earned', { count: stats.totalEarnings })}`;
 
-Your referral link:
-${referralLink}
+    // NEW: Show referral timer information
+    if (stats.referralTimers && stats.referralTimers.length > 0) {
+      message += `\n\n${t('invite.referral_timers_title')}`;
 
-🎁 **Rewards:**
-• +1 token when friend joins
-• +1 token/day per active friend
-
-📊 **Your Stats:**
-• Referrals: ${stats.directReferrals}
-• Total Earned: ${stats.totalEarnings} tokens`;
+      stats.referralTimers.forEach(timer => {
+        const status = timer.isAvailable ? '✅' : '⏳';
+        message += `\n${status} ${t('invite.referral_timer', {
+          hours: timer.hoursLeft,
+          time: timer.availableAt.toLocaleTimeString()
+        })}`;
+      });
+    }
 
     await ctx.reply(message, {
       reply_markup: {
         inline_keyboard: [
-          [{ text: '📤 Share Link', url: `https://t.me/share/url?url=${encodeURIComponent(referralLink)}` }],
-          [{ text: '« Back', callback_data: 'main_menu' }]
+          [{ text: t('buttons.share_link'), url: `https://t.me/share/url?url=${encodeURIComponent(referralLink)}` }],
+          [{ text: t('buttons.back'), callback_data: 'main_menu' }]
         ]
       }
     });
   } catch (error) {
     logger.error('Invite command error:', error);
-    await ctx.reply('❌ Something went wrong. Please try again.');
+    const t = getTranslator(detectLanguage(ctx));
+    await ctx.reply(t('errors.general'));
+  }
+}
+
+// ============================================
+// COMMAND: /language
+// ============================================
+
+async function languageCommand(ctx) {
+  try {
+    const userLang = ctx.user?.language || detectLanguage(ctx);
+    const t = getTranslator(userLang);
+    
+    const currentLang = LANGUAGE_NAMES[userLang] || 'English';
+    const message = `${t('language.title')}\n\n${t('language.current', { language: currentLang })}`;
+
+    await ctx.reply(message, {
+      reply_markup: {
+        inline_keyboard: getLanguageKeyboard()
+      }
+    });
+  } catch (error) {
+    logger.error('Language command error:', error);
+    const t = getTranslator(detectLanguage(ctx));
+    await ctx.reply(t('errors.general'));
   }
 }
 
@@ -216,29 +284,18 @@ ${referralLink}
 // ============================================
 
 async function helpCommand(ctx) {
-  const message = `ℹ️ **KIK Picture Tokens - Help**
+  try {
+    const userLang = ctx.user?.language || detectLanguage(ctx);
+    const t = getTranslator(userLang);
 
-**Main Commands:**
-/start - Get started and receive tokens
-/daily - Claim your daily 3 tokens
-/attach - Attach pictures to tokens
-/collection - View your collection
-/invite - Invite friends for rewards
-/help - Show this help
+    const message = `${t('help.title')}\n\n${t('help.commands')}\n${t('help.cmd_start')}\n${t('help.cmd_daily')}\n${t('help.cmd_attach')}\n${t('help.cmd_collection')}\n${t('help.cmd_invite')}\n${t('help.cmd_language')}\n${t('help.cmd_about')}\n${t('help.cmd_help')}\n\n${t('help.how_title')}\n${t('help.how1')}\n${t('help.how2')}\n${t('help.how3')}\n${t('help.how4')}\n\n${t('help.tips_title')}\n${t('help.tip1')}\n${t('help.tip2')}\n${t('help.tip3')}\n${t('help.tip4')}`;
 
-**How it works:**
-1. Get 3 tokens per day
-2. Attach pictures to ALL tokens
-3. If you complete yesterday's tokens → get 3 more today
-4. Invite friends for bonus tokens
-
-**Tips:**
-• Pictures can be uploaded or AI-generated
-• Make pictures private or public
-• Level up by being active
-• Invite friends for passive income`;
-
-  await ctx.reply(message, getMainMenu());
+    await ctx.reply(message, getMainMenu(t));
+  } catch (error) {
+    logger.error('Help command error:', error);
+    const t = getTranslator(detectLanguage(ctx));
+    await ctx.reply(t('errors.general'));
+  }
 }
 
 // ============================================
@@ -247,38 +304,113 @@ async function helpCommand(ctx) {
 
 async function handleCallback(ctx) {
   const action = ctx.callbackQuery.data;
+  const userLang = ctx.user?.language || detectLanguage(ctx);
+  const t = getTranslator(userLang);
 
   try {
+    // Handle language selection
+    if (action.startsWith('lang_')) {
+      const selectedLang = action.replace('lang_', '');
+      ctx.user.language = selectedLang;
+      
+      const newT = getTranslator(selectedLang);
+      const langName = LANGUAGE_NAMES[selectedLang] || 'English';
+      
+      await ctx.editMessageText(
+        newT('language.changed', { language: langName }),
+        getMainMenu(newT)
+      );
+      await ctx.answerCbQuery();
+      return;
+    }
+
     switch (action) {
       case 'main_menu':
-        await ctx.editMessageText('🎮 **Main Menu**\n\nChoose an action:', getMainMenu());
+        await ctx.editMessageText('🎮 **Main Menu**\n\n' + t('attach.choose'), getMainMenu(t));
+        await ctx.answerCbQuery();
         break;
 
       case 'attach_upload':
-        await ctx.reply('📸 **Upload Photo**\n\nSend me a photo to attach to your token:');
+        await ctx.reply(t('attach.upload_photo'));
         ctx.session = ctx.session || {};
         ctx.session.waitingForPhoto = true;
         await ctx.answerCbQuery();
         break;
 
       case 'attach_ai':
-        await ctx.reply('🤖 **AI Generation**\n\nSend me a text prompt to generate an image:\n\nExample: "red ferrari", "sunset beach", "cute cat"');
+        await ctx.reply(t('attach.generate_ai'));
         ctx.session = ctx.session || {};
         ctx.session.waitingForPrompt = true;
         await ctx.answerCbQuery();
         break;
 
       case 'view_collection':
-        await showCollection(ctx);
+        await showCollection(ctx, t);
+        await ctx.answerCbQuery();
+        break;
+
+      case 'claim_daily':
+        await dailyCommand(ctx);
+        await ctx.answerCbQuery();
+        break;
+
+      case 'invite_friends':
+        await inviteCommand(ctx);
+        await ctx.answerCbQuery();
+        break;
+
+      case 'show_help':
+        await helpCommand(ctx);
         await ctx.answerCbQuery();
         break;
 
       default:
+        // Handle privacy callbacks
+        if (action.startsWith('privacy_')) {
+          const parts = action.split('_');
+          const privacy = parts[1]; // 'private' or 'public'
+          const tokenId = parts.slice(2).join('_');
+          const isPrivate = privacy === 'private';
+
+          if (!ctx.session?.pendingImage) {
+            await ctx.answerCbQuery(t('errors.no_pending_image'));
+            return;
+          }
+
+          const imageUrl = ctx.session.pendingImage;
+
+          // Attach picture to token
+          const attachResult = await pictureService.attachPicture(
+            tokenId,
+            imageUrl,
+            isPrivate,
+            !isPrivate
+          );
+
+          if (attachResult.success) {
+            await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
+            await ctx.reply(t('attach.success') + '\n\n' + (isPrivate ? '🔒 Private' : '🌍 Public'));
+
+            // NEW: Update last picture attached timestamp for timer logic
+            const tokenService = require('../services/tokenService');
+            tokenService.updateLastPictureAttached(ctx.user.id, new Date());
+
+            // Clear session
+            delete ctx.session.pendingImage;
+            delete ctx.session.pendingToken;
+          } else {
+            await ctx.reply(t('attach.failed', { message: attachResult.message }));
+          }
+
+          await ctx.answerCbQuery();
+          return;
+        }
+
         await ctx.answerCbQuery();
     }
   } catch (error) {
     logger.error('Callback handler error:', error);
-    await ctx.answerCbQuery('❌ Error');
+    await ctx.answerCbQuery(t('errors.general'));
   }
 }
 
@@ -289,20 +421,22 @@ async function handleCallback(ctx) {
 async function handlePhoto(ctx) {
   try {
     const userId = ctx.user.id;
+    const userLang = ctx.user?.language || detectLanguage(ctx);
+    const t = getTranslator(userLang);
 
     // Check if user is waiting for photo
     if (!ctx.session?.waitingForPhoto) {
-      return; // Ignore photos not related to attachment
+      return;
     }
 
     // Get largest photo
     const photo = ctx.message.photo[ctx.message.photo.length - 1];
 
-    // Upload photo (mock for MVP)
+    // Upload photo
     const uploadResult = await pictureService.uploadPhoto(photo, userId);
 
     if (!uploadResult.success) {
-      return await ctx.reply('❌ Failed to upload photo. Try again.');
+      return await ctx.reply(t('attach.upload_failed'));
     }
 
     // Get first unattached token
@@ -310,18 +444,18 @@ async function handlePhoto(ctx) {
 
     if (unattachedTokens.length === 0) {
       ctx.session.waitingForPhoto = false;
-      return await ctx.reply('✅ All tokens already have pictures!');
+      return await ctx.reply(t('attach.all_attached'));
     }
 
     const token = unattachedTokens[0];
 
     // Ask about privacy
-    await ctx.reply('🔒 **Privacy Settings**\n\nMake this picture:', {
+    await ctx.reply(t('attach.privacy_title'), {
       reply_markup: {
         inline_keyboard: [
           [
-            { text: '🔒 Private (only you see)', callback_data: `privacy_private_${token.id}` },
-            { text: '🌍 Public (everyone sees)', callback_data: `privacy_public_${token.id}` }
+            { text: t('attach.privacy_private'), callback_data: `privacy_private_${token.id}` },
+            { text: t('attach.privacy_public'), callback_data: `privacy_public_${token.id}` }
           ]
         ]
       }
@@ -335,7 +469,8 @@ async function handlePhoto(ctx) {
     logger.info(`User ${userId} uploaded photo for token ${token.id}`);
   } catch (error) {
     logger.error('Photo handler error:', error);
-    await ctx.reply('❌ Something went wrong. Please try again.');
+    const t = getTranslator(detectLanguage(ctx));
+    await ctx.reply(t('errors.general'));
   }
 }
 
@@ -346,22 +481,24 @@ async function handlePhoto(ctx) {
 async function handleText(ctx) {
   try {
     const userId = ctx.user.id;
+    const userLang = ctx.user?.language || detectLanguage(ctx);
+    const t = getTranslator(userLang);
 
     // Check if user is waiting for AI prompt
     if (!ctx.session?.waitingForPrompt) {
-      return; // Ignore text not related to AI generation
+      return;
     }
 
     const prompt = ctx.message.text;
 
-    // Generate AI image (mock for MVP)
-    await ctx.reply('🎨 Generating image... Please wait.');
+    // Generate AI image
+    await ctx.reply(t('attach.generating'));
 
     const generateResult = await pictureService.generateAI(prompt, userId);
 
     if (!generateResult.success) {
       ctx.session.waitingForPrompt = false;
-      return await ctx.reply('❌ Failed to generate image. Try again.');
+      return await ctx.reply(t('attach.generate_failed'));
     }
 
     // Get first unattached token
@@ -369,21 +506,21 @@ async function handleText(ctx) {
 
     if (unattachedTokens.length === 0) {
       ctx.session.waitingForPrompt = false;
-      return await ctx.reply('✅ All tokens already have pictures!');
+      return await ctx.reply(t('attach.all_attached'));
     }
 
     const token = unattachedTokens[0];
 
     // Show generated image
     await ctx.replyWithPhoto(generateResult.imageUrl, {
-      caption: '✨ **AI Generated Image**\n\nMake this picture:',
+      caption: `✨ **AI Generated Image**\n\n${t('attach.privacy_title')}`,
       reply_markup: {
         inline_keyboard: [
           [
-            { text: '🔒 Private', callback_data: `privacy_private_${token.id}` },
-            { text: '🌍 Public', callback_data: `privacy_public_${token.id}` }
+            { text: t('attach.privacy_private'), callback_data: `privacy_private_${token.id}` },
+            { text: t('attach.privacy_public'), callback_data: `privacy_public_${token.id}` }
           ],
-          [{ text: '🔄 Regenerate', callback_data: 'attach_ai' }]
+          [{ text: t('buttons.regenerate'), callback_data: 'attach_ai' }]
         ]
       }
     });
@@ -396,7 +533,8 @@ async function handleText(ctx) {
     logger.info(`User ${userId} generated AI image for token ${token.id}`);
   } catch (error) {
     logger.error('Text handler error:', error);
-    await ctx.reply('❌ Something went wrong. Please try again.');
+    const t = getTranslator(detectLanguage(ctx));
+    await ctx.reply(t('errors.general'));
   }
 }
 
@@ -404,51 +542,54 @@ async function handleText(ctx) {
 // HELPER FUNCTIONS
 // ============================================
 
-function getMainMenu() {
+function getMainMenu(t) {
   return {
     reply_markup: {
       inline_keyboard: [
         [
-          { text: '🎨 Attach Picture', callback_data: 'attach_upload' },
-          { text: '📸 Collection', callback_data: 'view_collection' }
+          { text: t('buttons.attach_picture'), callback_data: 'attach_upload' },
+          { text: t('buttons.collection'), callback_data: 'view_collection' }
         ],
         [
-          { text: '🎁 Daily Claim', callback_data: 'claim_daily' },
-          { text: '👥 Invite', callback_data: 'invite_friends' }
+          { text: t('buttons.daily_claim'), callback_data: 'claim_daily' },
+          { text: t('buttons.invite'), callback_data: 'invite_friends' }
         ],
         [
-          { text: 'ℹ️ Help', callback_data: 'show_help' }
+          { text: t('buttons.about'), callback_data: 'show_about' },
+          { text: t('buttons.language'), callback_data: 'show_language' },
+          { text: t('buttons.help'), callback_data: 'show_help' }
         ]
       ]
     }
   };
 }
 
-async function showCollection(ctx) {
+async function showCollection(ctx, t) {
   const userId = ctx.user.id;
   const pictures = pictureService.getUserCollection(userId);
 
   if (pictures.length === 0) {
-    return await ctx.editMessageText('📭 Your collection is empty. Attach pictures to your tokens!', getMainMenu());
+    return await ctx.editMessageText(t('collection.empty'), getMainMenu(t));
   }
 
-  // Show first picture (for MVP, can add pagination later)
+  // Show first picture
   const picture = pictures[0];
-  const token = tokenService.getToken(picture.tokenId);
+  const privacy = picture.isPrivate ? '🔒 Private' : '🌍 Public';
+  const date = new Date(picture.uploadedAt).toLocaleDateString();
 
-  const caption = `🎨 **Token #1/${pictures.length}**
-
-${picture.isPrivate ? '🔒 Private' : '🌍 Public'}
-Created: ${new Date(picture.uploadedAt).toLocaleDateString()}
-
-Use /collection to see stats`;
+  const caption = t('collection.token_info', {
+    current: 1,
+    total: pictures.length,
+    privacy,
+    date
+  });
 
   await ctx.deleteMessage();
   await ctx.replyWithPhoto(picture.imageUrl, {
     caption,
     reply_markup: {
       inline_keyboard: [
-        [{ text: '« Back to Menu', callback_data: 'main_menu' }]
+        [{ text: t('buttons.back_to_menu'), callback_data: 'main_menu' }]
       ]
     }
   });
@@ -460,10 +601,12 @@ Use /collection to see stats`;
 
 module.exports = {
   startCommand,
+  aboutCommand,
   dailyCommand,
   attachCommand,
   collectionCommand,
   inviteCommand,
+  languageCommand,
   helpCommand,
   handleCallback,
   handlePhoto,

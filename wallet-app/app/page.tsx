@@ -1,8 +1,13 @@
 'use client';
 
 import { SimpleWallet } from '@/components/SimpleWallet';
+import { FriendsList } from '@/components/FriendsList';
+import { UserLevel } from '@/components/UserLevel';
+import { useState } from 'react';
 
 export default function Home() {
+  const [activeTab, setActiveTab] = useState<'wallet' | 'friends' | 'level'>('wallet');
+
   return (
     <main className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
       {/* Header */}
@@ -19,6 +24,44 @@ export default function Home() {
           </div>
         </div>
       </header>
+
+      {/* Navigation Tabs */}
+      <nav className="border-b border-gray-200 dark:border-gray-700 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm sticky top-12 z-40">
+        <div className="container mx-auto px-4">
+          <div className="flex space-x-2 overflow-x-auto">
+            <button
+              onClick={() => setActiveTab('wallet')}
+              className={`flex-1 py-3 px-4 text-sm font-medium whitespace-nowrap ${
+                activeTab === 'wallet'
+                  ? 'bg-primary-500 text-white border-b-2 border-primary-500'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'
+              }`}
+            >
+              💰 Кошелёк
+            </button>
+            <button
+              onClick={() => setActiveTab('friends')}
+              className={`flex-1 py-3 px-4 text-sm font-medium whitespace-nowrap ${
+                activeTab === 'friends'
+                  ? 'bg-primary-500 text-white border-b-2 border-primary-500'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'
+              }`}
+            >
+              👥 Друзья
+            </button>
+            <button
+              onClick={() => setActiveTab('level')}
+              className={`flex-1 py-3 px-4 text-sm font-medium whitespace-nowrap ${
+                activeTab === 'level'
+                  ? 'bg-primary-500 text-white border-b-2 border-primary-500'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'
+              }`}
+            >
+              📊 Уровень
+            </button>
+          </div>
+        </div>
+      </nav>
 
       {/* Main Content */}
       <div className="container mx-auto px-4 py-8">
@@ -58,8 +101,12 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Wallet */}
-          <SimpleWallet />
+          {/* Tab Content */}
+          <div className="space-y-6">
+            {activeTab === 'wallet' && <SimpleWallet />}
+            {activeTab === 'friends' && <FriendsList />}
+            {activeTab === 'level' && <UserLevel />}
+          </div>
 
           {/* Info */}
           <div className="mt-8 card bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">

@@ -10,6 +10,7 @@ const redis = require('./utils/redis');
 const tokenService = require('./services/tokenService');
 const pictureService = require('./services/pictureService');
 const referralService = require('./services/referralService');
+const pictureTokensCommands = require('./commands/pictureTokens');
 
 // Initialize Telegram bot
 const bot = new Telegraf(process.env.BOT_TOKEN);
@@ -53,6 +54,7 @@ app.get('/api/user/:userId', async (req, res) => {
       username: user.username,
       level: user.level,
       experience: user.experience,
+      language: user.language || 'en',
       tokens: {
         total: picStats.totalTokens,
         attached: picStats.attached,
@@ -160,6 +162,220 @@ app.post('/api/generate-ai', async (req, res) => {
   }
 });
 
+// Upload photo (mock)
+app.post('/api/upload-photo', async (req, res) => {
+  try {
+    const { userId } = req.body;
+
+    const inMemoryDB = db.getInMemoryData();
+    const user = Array.from(inMemoryDB.users.values()).find(u => u.telegram_id == userId);
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Mock photo upload - generate placeholder URL
+    const uploadResult = await pictureService.uploadPhoto(null, user.id);
+
+    if (!uploadResult.success) {
+      return res.json({ success: false, error: 'Upload failed' });
+    }
+
+    // Get first unattached token
+    const tokens = tokenService.getUserTokens(user.id, true);
+
+    if (tokens.length === 0) {
+      return res.json({ success: false, error: 'No tokens available' });
+    }
+
+    // Attach picture to token (default private, can change to public)
+    const attachResult = await pictureService.attachPicture(
+      tokens[0].id,
+      uploadResult.imageUrl,
+      true, // private
+      true // can change to public
+    );
+
+    res.json({
+      success: true,
+      picture: attachResult.picture
+    });
+
+  } catch (error) {
+    logger.error('API Error - Upload Photo:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Make picture public
+app.post('/api/make-public', async (req, res) => {
+  try {
+    const { userId, pictureId, showOwner } = req.body;
+
+    const inMemoryDB = db.getInMemoryData();
+    const user = Array.from(inMemoryDB.users.values()).find(u => u.telegram_id == userId);
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Make picture public
+    const result = await pictureService.makePublic(pictureId, user.id, showOwner !== false);
+
+    res.json(result);
+
+  } catch (error) {
+    logger.error('API Error - Make Public:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get leaderboard
+app.get('/api/leaderboard', async (req, res) => {
+  try {
+    const { type = 'tokens', limit = 100 } = req.query;
+
+    const inMemoryDB = db.getInMemoryData();
+    const users = Array.from(inMemoryDB.users.values());
+
+    let sortedUsers = [];
+
+    switch (type) {
+      case 'tokens':
+        // Sort by total tokens
+        sortedUsers = users.map(user => {
+          const tokens = tokenService.getUserTokens(user.id);
+          return {
+            id: user.id,
+            username: user.username || 'Anonymous',
+            value: tokens.length,
+            level: user.level
+          };
+        }).sort((a, b) => b.value - a.value);
+        break;
+
+      case 'level':
+        // Sort by level and experience
+        sortedUsers = users.map(user => ({
+          id: user.id,
+          username: user.username || 'Anonymous',
+          value: user.level,
+          experience: user.experience
+        })).sort((a, b) => {
+          if (b.value !== a.value) return b.value - a.value;
+          return b.experience - a.experience;
+        });
+        break;
+
+      case 'referrals':
+        // Sort by referral count
+        const referralPromises = users.map(async user => {
+          const refStats = await referralService.getReferralStats(user.id);
+          return {
+            id: user.id,
+            username: user.username || 'Anonymous',
+            value: refStats.directReferrals,
+            level: user.level
+          };
+        });
+        sortedUsers = (await Promise.all(referralPromises))
+          .sort((a, b) => b.value - a.value);
+        break;
+
+      default:
+        return res.status(400).json({ error: 'Invalid leaderboard type' });
+    }
+
+    // Limit results
+    const topUsers = sortedUsers.slice(0, parseInt(limit));
+
+    res.json({
+      type,
+      leaderboard: topUsers
+    });
+
+  } catch (error) {
+    logger.error('API Error - Leaderboard:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get friends list
+app.get('/api/friends', async (req, res) => {
+  try {
+    const { userId } = req.query;
+
+    const inMemoryDB = db.getInMemoryData();
+    const user = Array.from(inMemoryDB.users.values()).find(u => u.telegram_id == userId);
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Get referrals (friends are referrals in this system)
+    const refStats = await referralService.getReferralStats(user.id);
+    const referralIds = refStats.referralChain || [];
+
+    // Get friend details
+    const friends = referralIds.slice(0, 50).map(friendId => {
+      const friend = Array.from(inMemoryDB.users.values()).find(u => u.id === friendId);
+      if (!friend) return null;
+
+      const tokens = tokenService.getUserTokens(friendId);
+      const picStats = pictureService.getUserStats(friendId);
+
+      return {
+        id: friend.id,
+        username: friend.username || 'Anonymous',
+        level: friend.level,
+        tokens: tokens.length,
+        publicPictures: picStats.publicPictures
+      };
+    }).filter(f => f !== null);
+
+    res.json({
+      friends,
+      total: referralIds.length
+    });
+
+  } catch (error) {
+    logger.error('API Error - Friends:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get public collection
+app.get('/api/collection/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    const inMemoryDB = db.getInMemoryData();
+    const user = Array.from(inMemoryDB.users.values()).find(u => u.telegram_id == userId);
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Get only public pictures
+    const publicPictures = pictureService.getUserCollection(user.id, true);
+
+    res.json({
+      username: user.username || 'Anonymous',
+      level: user.level,
+      pictures: publicPictures.map(p => ({
+        id: p.id,
+        imageUrl: p.imageUrl,
+        uploadedAt: p.uploadedAt,
+        ownerVisible: p.ownerVisible
+      }))
+    });
+
+  } catch (error) {
+    logger.error('API Error - Collection:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // ============================================
 // MIDDLEWARE
 // ============================================
@@ -196,138 +412,37 @@ bot.use(async (ctx, next) => {
 });
 
 // ============================================
-// BOT COMMANDS - LAUNCH MINI APP
+// BOT COMMANDS (UPDATED WITH ALL NEW COMMANDS)
 // ============================================
 
-bot.start(async (ctx) => {
-  try {
-    const userId = ctx.user.id;
-    const username = ctx.user.username || 'there';
-
-    // Check for referral code
-    const referralCode = ctx.message?.text.split(' ')[1];
-
-    if (referralCode) {
-      const result = await referralService.registerReferral(userId, referralCode);
-      if (result.success && result.referrer) {
-        await ctx.reply(`✅ You joined using a referral link! Your friend got a bonus token.`);
-      }
-    } else {
-      await referralService.registerReferral(userId, null);
-    }
-
-    // Give starting tokens
-    const claimResult = await tokenService.claimDailyTokens(userId);
-
-    // Send welcome message with Mini App button
-    const webAppUrl = `${process.env.WEBAPP_URL || 'http://localhost:3000'}`;
-
-    await ctx.reply(
-      `🎮 **Welcome to KIK Picture Tokens, ${username}!**\n\n` +
-      `🎁 You've received ${claimResult.tokens?.length || 3} KIK tokens!\n\n` +
-      `🎨 Attach pictures to your tokens\n` +
-      `💎 Collect and level up\n` +
-      `👥 Invite friends for rewards\n\n` +
-      `👇 **Tap below to open the app:**`,
-      {
-        reply_markup: {
-          inline_keyboard: [
-            [{ text: '🚀 Open KIK App', web_app: { url: webAppUrl } }],
-            [{ text: '👥 Invite Friends', callback_data: 'invite' }],
-            [{ text: 'ℹ️ Help', callback_data: 'help' }]
-          ]
-        }
-      }
-    );
-
-    logger.info(`User ${userId} started bot, received ${claimResult.tokens?.length || 3} tokens`);
-  } catch (error) {
-    logger.error('Start command error:', error);
-    await ctx.reply('❌ Something went wrong. Please try again.');
-  }
-});
+bot.start(pictureTokensCommands.startCommand);
 
 bot.command('app', async (ctx) => {
-  const webAppUrl = `${process.env.WEBAPP_URL || 'http://localhost:3000'}`;
-
-  await ctx.reply(
-    '🎨 **KIK Picture Tokens**\n\nOpen the app to manage your collection:',
-    {
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: '🚀 Open App', web_app: { url: webAppUrl } }]
-        ]
-      }
+  const webAppUrl = process.env.WEBAPP_URL || 'http://localhost:3000';
+  await ctx.reply('🎨 **KIK Picture Tokens**\n\nOpen the app:', {
+    reply_markup: {
+      inline_keyboard: [[
+        { text: '🚀 Open App', web_app: { url: webAppUrl } }
+      ]]
     }
-  );
+  });
 });
 
-bot.command('help', async (ctx) => {
-  await ctx.reply(
-    `ℹ️ **KIK Picture Tokens - Help**\n\n` +
-    `**Commands:**\n` +
-    `/start - Get started\n` +
-    `/app - Open Mini App\n` +
-    `/help - Show this help\n\n` +
-    `**How it works:**\n` +
-    `1. Get 3 tokens per day\n` +
-    `2. Attach pictures to ALL tokens\n` +
-    `3. Get 3 more tomorrow if you completed all\n` +
-    `4. Invite friends for bonus tokens\n\n` +
-    `Use the Mini App for the best experience! 👇`,
-    {
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: '🚀 Open App', web_app: { url: process.env.WEBAPP_URL || 'http://localhost:3000' } }]
-        ]
-      }
-    }
-  );
-});
+// Picture Tokens Commands
+bot.command('daily', pictureTokensCommands.dailyCommand);
+bot.command('attach', pictureTokensCommands.attachCommand);
+bot.command('collection', pictureTokensCommands.collectionCommand);
+bot.command('invite', pictureTokensCommands.inviteCommand);
+bot.command('help', pictureTokensCommands.helpCommand);
 
-// ============================================
-// CALLBACK QUERY HANDLERS
-// ============================================
+// NEW COMMANDS - Multilingual Support
+bot.command('about', pictureTokensCommands.aboutCommand);
+bot.command('language', pictureTokensCommands.languageCommand);
 
-bot.on('callback_query', async (ctx) => {
-  const action = ctx.callbackQuery.data;
-
-  try {
-    if (action === 'invite') {
-      const stats = await referralService.getReferralStats(ctx.user.id);
-      const botUsername = ctx.botInfo.username;
-      const referralLink = referralService.getReferralLink(stats.referralCode, botUsername);
-
-      await ctx.reply(
-        `👥 **Invite Friends**\n\n` +
-        `Your referral link:\n${referralLink}\n\n` +
-        `🎁 **Rewards:**\n` +
-        `• +1 token when friend joins\n` +
-        `• +1 token/day per active friend\n\n` +
-        `📊 **Your Stats:**\n` +
-        `• Referrals: ${stats.directReferrals}\n` +
-        `• Total Earned: ${stats.totalEarnings} tokens`
-      );
-    } else if (action === 'help') {
-      await ctx.reply(
-        `ℹ️ **KIK Picture Tokens - Help**\n\n` +
-        `Open the Mini App for full features! 🚀`,
-        {
-          reply_markup: {
-            inline_keyboard: [
-              [{ text: '🚀 Open App', web_app: { url: process.env.WEBAPP_URL || 'http://localhost:3000' } }]
-            ]
-          }
-        }
-      );
-    }
-
-    await ctx.answerCbQuery();
-  } catch (error) {
-    logger.error('Callback error:', error);
-    await ctx.answerCbQuery('❌ Error');
-  }
-});
+// Event handlers
+bot.on('callback_query', pictureTokensCommands.handleCallback);
+bot.on('photo', pictureTokensCommands.handlePhoto);
+bot.on('text', pictureTokensCommands.handleText);
 
 // ============================================
 // ERROR HANDLER
@@ -358,6 +473,8 @@ async function start() {
 
     logger.info('✅ Bot started successfully!');
     logger.info(`Bot username: @${bot.botInfo.username}`);
+    logger.info('🌍 Multilingual support: 28 European languages');
+    logger.info('💎 Tokenomics: 10,000,000,000 KIK tokens');
     logger.info('Ready to receive updates...');
   } catch (error) {
     logger.error('Failed to start bot:', error);
