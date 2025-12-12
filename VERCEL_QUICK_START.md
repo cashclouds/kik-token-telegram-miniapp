@@ -9,8 +9,8 @@
 
 ## 📍 Ссылки
 
-- **GitHub репозиторий:** https://github.com/cashclouds/kik-token.git
-- **Последний коммит:** `f613b57` - "подготовка проекта для деплоя на Vercel"
+- **GitHub репозиторий:** https://github.com/cashclouds/kik-collectibles-bot.git
+- **Проект:** KIK Collectibles Telegram Bot + Mini App
 
 ---
 

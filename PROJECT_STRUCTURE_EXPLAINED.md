@@ -259,7 +259,7 @@ contracts/
 
 **Текущая структура:** Один репозиторий на GitHub
 ```
-https://github.com/cashclouds/kik-token.git
+https://github.com/cashclouds/kik-collectibles-bot.git
 ├── telegram-bot/
 └── wallet-app/
 ```
@@ -562,7 +562,7 @@ telegram-bot/api/
 ### Полезные ссылки:
 
 - 📖 Инструкция деплоя: `TELEGRAM_BOT_VERCEL_GUIDE.md`
-- 🔗 GitHub: https://github.com/cashclouds/kik-token
+- 🔗 GitHub: https://github.com/cashclouds/kik-collectibles-bot
 - 🌐 Vercel: https://vercel.com/dashboard
 - 💎 Контракт: https://amoy.polygonscan.com/address/0x636C84f54cE96dfb4AE8B0D7c1420170bF8c22b7
 

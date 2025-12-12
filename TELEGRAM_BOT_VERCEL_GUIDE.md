@@ -24,7 +24,7 @@
 
 ## 📍 Информация о репозитории
 
-- **GitHub:** https://github.com/cashclouds/kik-token.git
+- **GitHub:** https://github.com/cashclouds/kik-collectibles-bot.git
 - **Проект:** KIK Collectibles - Telegram Bot + Mini App
 - **Контракт:** 0x636C84f54cE96dfb4AE8B0D7c1420170bF8c22b7 (Polygon Amoy)
 
@@ -381,7 +381,7 @@ telegram-bot/
 ### Полезные ссылки:
 
 - **Vercel Dashboard:** https://vercel.com/dashboard
-- **GitHub Repository:** https://github.com/cashclouds/kik-token
+- **GitHub Repository:** https://github.com/cashclouds/kik-collectibles-bot
 - **Telegram Bot API:** https://core.telegram.org/bots/api
 - **KIK Token Contract:** https://amoy.polygonscan.com/address/0x636C84f54cE96dfb4AE8B0D7c1420170bF8c22b7
 
