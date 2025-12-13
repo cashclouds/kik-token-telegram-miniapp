@@ -486,5 +486,7 @@ async function start() {
 process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
 
-// Start the bot
-start();
+// Start the bot only if run directly (not imported as module)
+if (require.main === module) {
+  start();
+}
