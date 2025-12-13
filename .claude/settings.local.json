@@ -21,7 +21,13 @@
       "Bash(xcopy:*)",
       "Bash(robocopy:*)",
       "Bash(powershell:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nfeat: Add photo upload endpoint and complete multilingual support\n\n- Add upload-photo.js API endpoint for Cloudinary integration\n- Complete translations for all 28 European languages\n- Add Baltic languages (Estonian, Latvian, Lithuanian) to language menu\n- Add Scandinavian languages (Norwegian, Finnish, Danish) to language menu\n- Update i18n.js with full language keyboard support\n- Clean up documentation files\n- Update package dependencies (cloudinary, multer)\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git push:*)",
+      "Bash(git remote set-url:*)",
+      "Bash(git fetch:*)",
+      "Bash(git pull:*)",
+      "Bash(git commit:*)"
     ],
     "deny": [],
     "ask": []
