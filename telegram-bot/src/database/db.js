@@ -449,7 +449,21 @@ class Database {
           activeReferrals: []
         });
 
-        console.log(`Created new user: ${telegramId} (@${telegramUser.username})`);
+        // 🎁 WELCOME BONUS: Give 3 starter tokens to new users
+        for (let i = 0; i < 3; i++) {
+          const tokenId = `TOKEN_${Date.now()}_${userId}_${i}`;
+          const token = {
+            id: tokenId,
+            owner: userId,
+            pictureId: null,
+            generation: 1,
+            createdAt: new Date(),
+            attachedAt: null
+          };
+          inMemoryDB.tokens.set(tokenId, token);
+        }
+
+        console.log(`Created new user: ${telegramId} (@${telegramUser.username}) with 3 starter tokens`);
       }
 
       return user;
