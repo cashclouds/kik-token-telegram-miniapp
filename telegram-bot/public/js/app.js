@@ -3,6 +3,29 @@
  * Main Application Logic
  */
 
+// Debug logging
+console.log('🚀 App.js loaded successfully');
+console.log('Telegram WebApp available:', !!window.Telegram?.WebApp);
+
+// Global error handler
+window.onerror = function(msg, url, line, col, error) {
+    console.error('❌ Global Error:', {
+        message: msg,
+        url: url,
+        line: line,
+        column: col,
+        error: error
+    });
+    alert(`Error: ${msg}\nLine: ${line}`);
+    return false;
+};
+
+// Promise rejection handler
+window.addEventListener('unhandledrejection', function(event) {
+    console.error('❌ Unhandled Promise Rejection:', event.reason);
+    alert(`Promise Error: ${event.reason}`);
+});
+
 // Global state
 let tg = window.Telegram?.WebApp;
 let currentUser = null;
@@ -309,6 +332,59 @@ function setupEventListeners() {
     document.querySelectorAll('.filter-btn').forEach(btn => {
         btn.addEventListener('click', () => handleFilterChange(btn.dataset.filter));
     });
+
+    // File input handlers
+    document.getElementById('cameraInput')?.addEventListener('change', handleFileSelected);
+    document.getElementById('galleryInput')?.addEventListener('change', handleFileSelected);
+}
+
+// ============================================
+// FILE INPUT HANDLER
+// ============================================
+
+async function handleFileSelected(event) {
+    try {
+        const file = event.target.files[0];
+        
+        if (!file) {
+            console.log('No file selected');
+            return;
+        }
+
+        console.log('File selected:', file.name, file.type, file.size);
+
+        // Check if it's an image
+        if (!file.type.startsWith('image/')) {
+            showNotification('Please select an image file', 'error');
+            return;
+        }
+
+        // Check file size (max 10MB)
+        const maxSize = 10 * 1024 * 1024; // 10MB
+        if (file.size > maxSize) {
+            showNotification('Image too large. Max size: 10MB', 'error');
+            return;
+        }
+
+        // Read file as Data URL
+        const reader = new FileReader();
+        
+        reader.onload = function(e) {
+            console.log('File loaded, showing preview');
+            showUploadPreview(e.target.result);
+        };
+
+        reader.onerror = function(error) {
+            console.error('Error reading file:', error);
+            showNotification('Failed to read image file', 'error');
+        };
+
+        reader.readAsDataURL(file);
+
+    } catch (error) {
+        console.error('File selection error:', error);
+        showNotification('Failed to process image', 'error');
+    }
 }
 
 // ============================================
@@ -401,16 +477,17 @@ function closeUploadModal() {
 
 async function handleCameraUpload() {
     try {
-        if (!tg) {
-            showNotification('Camera available only in Telegram app', 'error');
+        console.log('Camera button clicked');
+        const cameraInput = document.getElementById('cameraInput');
+        
+        if (!cameraInput) {
+            console.error('Camera input not found');
+            showNotification('Camera input not available', 'error');
             return;
         }
 
-        // Use Telegram WebApp API to access camera
-        const photo = await tg.requestCameraAccess();
-        if (photo) {
-            showUploadPreview(photo);
-        }
+        // Trigger file input for camera
+        cameraInput.click();
 
     } catch (error) {
         console.error('Camera access error:', error);
@@ -420,16 +497,17 @@ async function handleCameraUpload() {
 
 async function handleGalleryUpload() {
     try {
-        if (!tg) {
-            showNotification('Gallery available only in Telegram app', 'error');
+        console.log('Gallery button clicked');
+        const galleryInput = document.getElementById('galleryInput');
+        
+        if (!galleryInput) {
+            console.error('Gallery input not found');
+            showNotification('Gallery input not available', 'error');
             return;
         }
 
-        // Use Telegram WebApp API to access gallery
-        const photo = await tg.requestGalleryAccess();
-        if (photo) {
-            showUploadPreview(photo);
-        }
+        // Trigger file input for gallery
+        galleryInput.click();
 
     } catch (error) {
         console.error('Gallery access error:', error);
