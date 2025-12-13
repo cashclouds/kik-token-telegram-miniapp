@@ -158,6 +158,253 @@ class Database {
     console.log('In-memory database cleared');
   }
 
+  // ==========================================
+  // PICTURE TOKENS METHODS
+  // ==========================================
+
+  /**
+   * Create a new token for a user
+   * @param {number} userId User ID
+   * @param {number} generation Token generation (default: 1)
+   * @returns {Promise<Object>} Created token
+   */
+  async createToken(userId, generation = 1) {
+    if (this.useInMemory) {
+      const tokenId = `token_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const token = {
+        id: tokenId,
+        owner: userId,
+        pictureId: null,
+        generation,
+        createdAt: new Date(),
+        attachedAt: null
+      };
+      inMemoryDB.tokens.set(tokenId, token);
+      return token;
+    }
+
+    // Real database
+    const result = await this.query(
+      `INSERT INTO tokens (owner, generation, created_at)
+       VALUES ($1, $2, NOW())
+       RETURNING *`,
+      [userId, generation]
+    );
+    return result.rows[0];
+  }
+
+  /**
+   * Get user's tokens
+   * @param {number} userId User ID
+   * @returns {Promise<Array>} User's tokens
+   */
+  async getUserTokens(userId) {
+    if (this.useInMemory) {
+      const tokens = Array.from(inMemoryDB.tokens.values()).filter(t => t.owner === userId);
+      return tokens;
+    }
+
+    const result = await this.query(
+      'SELECT * FROM tokens WHERE owner = $1 ORDER BY created_at DESC',
+      [userId]
+    );
+    return result.rows;
+  }
+
+  /**
+   * Attach picture to token
+   * @param {string} tokenId Token ID
+   * @param {string} pictureId Picture ID
+   * @returns {Promise<Object>} Updated token
+   */
+  async attachPictureToToken(tokenId, pictureId) {
+    if (this.useInMemory) {
+      const token = inMemoryDB.tokens.get(tokenId);
+      if (!token) throw new Error('Token not found');
+      
+      token.pictureId = pictureId;
+      token.attachedAt = new Date();
+      inMemoryDB.tokens.set(tokenId, token);
+      return token;
+    }
+
+    const result = await this.query(
+      `UPDATE tokens SET picture_id = $1, attached_at = NOW()
+       WHERE id = $2
+       RETURNING *`,
+      [pictureId, tokenId]
+    );
+    return result.rows[0];
+  }
+
+  /**
+   * Save picture metadata
+   * @param {Object} pictureData Picture data
+   * @returns {Promise<Object>} Saved picture
+   */
+  async savePicture(pictureData) {
+    if (this.useInMemory) {
+      const pictureId = `pic_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const picture = {
+        id: pictureId,
+        tokenId: pictureData.tokenId,
+        imageUrl: pictureData.imageUrl,
+        isPrivate: pictureData.isPrivate || false,
+        encryptionKey: pictureData.encryptionKey || null,
+        uploadedAt: new Date()
+      };
+      inMemoryDB.pictures.set(pictureId, picture);
+      return picture;
+    }
+
+    const result = await this.query(
+      `INSERT INTO pictures (token_id, image_url, is_private, encryption_key, uploaded_at)
+       VALUES ($1, $2, $3, $4, NOW())
+       RETURNING *`,
+      [pictureData.tokenId, pictureData.imageUrl, pictureData.isPrivate, pictureData.encryptionKey]
+    );
+    return result.rows[0];
+  }
+
+  /**
+   * Get user stats
+   * @param {number} userId User ID
+   * @returns {Promise<Object>} User stats
+   */
+  async getUserStats(userId) {
+    if (this.useInMemory) {
+      let stats = inMemoryDB.userStats.get(userId);
+      if (!stats) {
+        stats = {
+          lastClaimDate: null,
+          tokensToday: 0,
+          experience: 0,
+          level: 1,
+          activeReferrals: []
+        };
+        inMemoryDB.userStats.set(userId, stats);
+      }
+      return stats;
+    }
+
+    const result = await this.query(
+      'SELECT * FROM user_stats WHERE user_id = $1',
+      [userId]
+    );
+
+    if (result.rows.length > 0) {
+      return result.rows[0];
+    }
+
+    // Create default stats
+    const insertResult = await this.query(
+      `INSERT INTO user_stats (user_id, last_claim_date, tokens_today, experience, level)
+       VALUES ($1, NULL, 0, 0, 1)
+       RETURNING *`,
+      [userId]
+    );
+    return insertResult.rows[0];
+  }
+
+  /**
+   * Update user stats
+   * @param {number} userId User ID
+   * @param {Object} updates Stats updates
+   * @returns {Promise<Object>} Updated stats
+   */
+  async updateUserStats(userId, updates) {
+    if (this.useInMemory) {
+      let stats = inMemoryDB.userStats.get(userId);
+      if (!stats) {
+        stats = {
+          lastClaimDate: null,
+          tokensToday: 0,
+          experience: 0,
+          level: 1,
+          activeReferrals: []
+        };
+      }
+      Object.assign(stats, updates);
+      inMemoryDB.userStats.set(userId, stats);
+      return stats;
+    }
+
+    const fields = [];
+    const values = [];
+    let paramIndex = 1;
+
+    Object.entries(updates).forEach(([key, value]) => {
+      fields.push(`${key} = $${paramIndex}`);
+      values.push(value);
+      paramIndex++;
+    });
+
+    values.push(userId);
+
+    const result = await this.query(
+      `UPDATE user_stats SET ${fields.join(', ')}
+       WHERE user_id = $${paramIndex}
+       RETURNING *`,
+      values
+    );
+    return result.rows[0];
+  }
+
+  /**
+   * Record daily activity
+   * @param {number} userId User ID
+   * @param {boolean} attachedAll Whether user attached all tokens
+   * @returns {Promise<Object>} Activity record
+   */
+  async recordDailyActivity(userId, attachedAll) {
+    const today = new Date().toISOString().split('T')[0];
+
+    if (this.useInMemory) {
+      const activity = {
+        userId,
+        date: today,
+        attachedAll
+      };
+      inMemoryDB.dailyActivity.set(`${userId}_${today}`, activity);
+      return activity;
+    }
+
+    const result = await this.query(
+      `INSERT INTO daily_activity (user_id, date, attached_all)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (user_id, date) 
+       DO UPDATE SET attached_all = $3
+       RETURNING *`,
+      [userId, today, attachedAll]
+    );
+    return result.rows[0];
+  }
+
+  /**
+   * Get yesterday's activity
+   * @param {number} userId User ID
+   * @returns {Promise<Object|null>} Yesterday's activity or null
+   */
+  async getYesterdayActivity(userId) {
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+    if (this.useInMemory) {
+      return inMemoryDB.dailyActivity.get(`${userId}_${yesterdayStr}`) || null;
+    }
+
+    const result = await this.query(
+      'SELECT * FROM daily_activity WHERE user_id = $1 AND date = $2',
+      [userId, yesterdayStr]
+    );
+    return result.rows[0] || null;
+  }
+
+  // ==========================================
+  // USER MANAGEMENT
+  // ==========================================
+
   /**
    * Get or create user
    * @param {Object} telegramUser Telegram user object

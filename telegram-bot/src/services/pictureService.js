@@ -11,11 +11,23 @@
 const logger = require('../utils/logger');
 const db = require('../database/db');
 const crypto = require('crypto');
+const OpenAI = require('openai');
 
 class PictureService {
   constructor() {
-    // Mock AI generation (for MVP)
-    this.mockAIEnabled = true;
+    // Initialize OpenAI client
+    this.openai = process.env.OPENAI_API_KEY 
+      ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+      : null;
+    
+    // Fallback to mock if no API key
+    this.mockAIEnabled = !process.env.OPENAI_API_KEY;
+    
+    if (this.mockAIEnabled) {
+      logger.warn('⚠️  OPENAI_API_KEY not set - using mock AI generation');
+    } else {
+      logger.info('✅ OpenAI client initialized');
+    }
   }
 
   /**
@@ -100,31 +112,57 @@ class PictureService {
   }
 
   /**
-   * Generate AI image (mock for MVP)
+   * Generate AI image using OpenAI DALL-E
    * @param {string} prompt AI generation prompt
    * @param {number} userId User ID
-   * @returns {Promise<{success: boolean, imageUrl: string}>}
+   * @returns {Promise<{success: boolean, imageUrl: string, message?: string}>}
    */
   async generateAI(prompt, userId) {
-    if (!this.mockAIEnabled) {
+    // Use mock if no OpenAI API key
+    if (this.mockAIEnabled) {
+      const mockUrl = `https://placehold.co/600x400/png?text=${encodeURIComponent(prompt.substring(0, 20))}`;
+      logger.info(`Mock AI image generated for user ${userId}: "${prompt}"`);
+      
       return {
-        success: false,
-        imageUrl: null,
-        message: 'AI generation not available'
+        success: true,
+        imageUrl: mockUrl,
+        message: 'Mock AI generation (set OPENAI_API_KEY for real generation)'
       };
     }
 
-    // In production: Call DALL-E or Stable Diffusion API
-    // For MVP: Return placeholder
+    // Real OpenAI DALL-E generation
+    try {
+      logger.info(`Generating AI image with DALL-E for user ${userId}: "${prompt}"`);
+      
+      const response = await this.openai.images.generate({
+        model: "dall-e-3",
+        prompt: prompt,
+        n: 1,
+        size: "1024x1024",
+        quality: "standard",
+        style: "vivid"
+      });
 
-    const mockUrl = `https://placehold.co/600x400/png?text=${encodeURIComponent(prompt.substring(0, 20))}`;
+      const imageUrl = response.data[0].url;
+      
+      logger.info(`✅ AI image generated successfully for user ${userId}`);
 
-    logger.info(`AI image generated for user ${userId}: "${prompt}"`);
-
-    return {
-      success: true,
-      imageUrl: mockUrl
-    };
+      return {
+        success: true,
+        imageUrl: imageUrl
+      };
+    } catch (error) {
+      logger.error(`❌ OpenAI image generation failed for user ${userId}:`, error.message);
+      
+      // Fallback to mock on error
+      const mockUrl = `https://placehold.co/600x400/EE4444/FFFFFF/png?text=Generation+Failed`;
+      
+      return {
+        success: false,
+        imageUrl: mockUrl,
+        message: `AI generation failed: ${error.message}`
+      };
+    }
   }
 
   /**
