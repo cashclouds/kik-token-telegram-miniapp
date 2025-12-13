@@ -313,6 +313,17 @@ async function handleCallback(ctx) {
       const selectedLang = action.replace('lang_', '');
       ctx.user.language = selectedLang;
       
+      // Save language to database
+      const db = require('../database/db');
+      if (db.useInMemory) {
+        // Update in-memory user
+        const userData = db.getInMemoryData();
+        const user = Array.from(userData.users.values()).find(u => u.id === ctx.user.id);
+        if (user) {
+          user.language = selectedLang;
+        }
+      }
+      
       const newT = getTranslator(selectedLang);
       const langName = LANGUAGE_NAMES[selectedLang] || 'English';
       
@@ -320,6 +331,8 @@ async function handleCallback(ctx) {
         newT('language.changed', { language: langName }),
         getMainMenu(newT)
       );
+      
+      logger.info(`User ${ctx.user.id} changed language to ${selectedLang}`);
       await ctx.answerCbQuery();
       return;
     }
@@ -361,6 +374,16 @@ async function handleCallback(ctx) {
 
       case 'show_help':
         await helpCommand(ctx);
+        await ctx.answerCbQuery();
+        break;
+
+      case 'show_about':
+        await aboutCommand(ctx);
+        await ctx.answerCbQuery();
+        break;
+
+      case 'show_language':
+        await languageCommand(ctx);
         await ctx.answerCbQuery();
         break;
 

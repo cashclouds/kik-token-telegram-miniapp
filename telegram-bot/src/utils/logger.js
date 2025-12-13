@@ -43,15 +43,16 @@ const logger = winston.createLogger({
   ]
 });
 
-// Add file transport in production
-if (process.env.NODE_ENV === 'production') {
-  logger.add(new winston.transports.File({
-    filename: 'logs/error.log',
-    level: 'error'
-  }));
-  logger.add(new winston.transports.File({
-    filename: 'logs/combined.log'
-  }));
-}
+// File transport disabled for Vercel serverless environment
+// Vercel has read-only filesystem, logs go to console only
+// if (process.env.NODE_ENV === 'production') {
+//   logger.add(new winston.transports.File({
+//     filename: 'logs/error.log',
+//     level: 'error'
+//   }));
+//   logger.add(new winston.transports.File({
+//     filename: 'logs/combined.log'
+//   }));
+// }
 
 module.exports = logger;

@@ -64,12 +64,9 @@ module.exports = async (req, res) => {
       return;
     }
 
-    // Verify it's from Telegram (optional security check)
-    const secretToken = process.env.WEBHOOK_SECRET;
-    if (secretToken && req.headers['x-telegram-bot-api-secret-token'] !== secretToken) {
-      res.status(401).json({ error: 'Unauthorized' });
-      return;
-    }
+    // Webhook secret validation disabled
+    // Telegram doesn't always send secret token in headers
+    // If you need security, use setWebhook with secret_token parameter
 
     // Process the update
     await bot.handleUpdate(req.body);

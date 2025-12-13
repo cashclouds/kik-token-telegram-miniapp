@@ -498,3 +498,4 @@ MIT License
 
 **Created for KIK Collectibles** - Telegram NFT Ecosystem
 **Target**: 10M+ users, $50M-200M exit value
+----Update---
