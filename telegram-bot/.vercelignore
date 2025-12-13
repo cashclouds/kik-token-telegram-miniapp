@@ -2,11 +2,4 @@ node_modules
 .env
 .env.local
 *.log
-.git
-src/
-README.md
-SETUP_GUIDE.md
-TRANSLATION_STATUS.md
-MINIAPP_STATUS.md
-MVP_DEPLOYMENT_GUIDE.md
-database-schema.sql
+.DS_Store
