@@ -108,9 +108,14 @@ async function handleJsonUpload(req, res) {
     return res.status(400).json({ success: false, error: 'Missing userId' });
   }
 
-  const user = getUserByTelegramId(userId);
+  let user = getUserByTelegramId(userId);
+
+  // Auto-create user if not found (Mini App can be opened before bot interaction)
   if (!user) {
-    return res.status(404).json({ success: false, error: 'User not found' });
+    user = await db.getOrCreateUser({
+      id: Number(userId),
+      username: null
+    });
   }
 
   // Pick token automatically
@@ -183,9 +188,14 @@ async function handleMultipartUpload(req, res) {
     return res.status(400).json({ success: false, error: 'Missing userId' });
   }
 
-  const user = getUserByTelegramId(userId);
+  let user = getUserByTelegramId(userId);
+
+  // Auto-create user if not found (Mini App can be opened before bot interaction)
   if (!user) {
-    return res.status(404).json({ success: false, error: 'User not found' });
+    user = await db.getOrCreateUser({
+      id: Number(userId),
+      username: null
+    });
   }
 
   // Pick token automatically if not provided

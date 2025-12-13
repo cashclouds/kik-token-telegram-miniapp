@@ -26,11 +26,14 @@ module.exports = async (req, res) => {
 
     // Get user from database
     const inMemoryDB = db.getInMemoryData();
-    const user = Array.from(inMemoryDB.users.values()).find(u => u.telegram_id == userId);
+    let user = Array.from(inMemoryDB.users.values()).find(u => u.telegram_id == userId);
 
+    // Auto-create user if not found (Mini App can be opened before bot interaction)
     if (!user) {
-      res.status(404).json({ error: 'User not found' });
-      return;
+      user = await db.getOrCreateUser({
+        id: Number(userId),
+        username: null
+      });
     }
 
     // Get user stats
