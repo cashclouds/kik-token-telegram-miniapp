@@ -1,201 +1,271 @@
 /**
- * Photo Upload API Endpoint
- * Handles photo uploads to Cloudinary for KIK Picture Tokens
+ * Photo Upload API Endpoint (MVP)
+ *
+ * Supports TWO formats:
+ * 1) JSON body (used by Mini App app.js today):
+ *    { userId, photoData (dataURL/base64), isPrivate }
+ * 2) multipart/form-data (optional, for future):
+ *    photo=<file>, userId, tokenId, isPrivate
+ *
+ * Behavior:
+ * - If tokenId is not provided, picks the first unattached token for the user.
+ * - If Cloudinary is configured and photoData/file is available, uploads there.
+ * - Otherwise falls back to a mock URL (so MVP works without Cloudinary).
  */
 
-const multer = require('multer');
-const cloudinary = require('cloudinary').v2;
+const db = require('../src/database/db');
+const tokenService = require('../src/services/tokenService');
+const pictureService = require('../src/services/pictureService');
+const logger = require('../src/utils/logger');
 
-// Configure Cloudinary
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET
-});
+let multer;
+let cloudinary;
 
-// Configure multer for memory storage
-const storage = multer.memoryStorage();
-const upload = multer({
-  storage: storage,
-  limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB limit
-    files: 1
-  },
-  fileFilter: (req, file, cb) => {
-    // Check file type
-    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
-    if (allowedTypes.includes(file.mimetype)) {
-      cb(null, true);
-    } else {
-      cb(new Error('Invalid file type. Only JPEG, PNG, GIF, and WebP are allowed.'), false);
-    }
+function isCloudinaryConfigured() {
+  return Boolean(
+    process.env.CLOUDINARY_CLOUD_NAME &&
+    process.env.CLOUDINARY_API_KEY &&
+    process.env.CLOUDINARY_API_SECRET
+  );
+}
+
+function initCloudinaryIfNeeded() {
+  if (!isCloudinaryConfigured()) return null;
+
+  if (!cloudinary) {
+    cloudinary = require('cloudinary').v2;
+    cloudinary.config({
+      cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+      api_key: process.env.CLOUDINARY_API_KEY,
+      api_secret: process.env.CLOUDINARY_API_SECRET
+    });
   }
-}).single('photo');
 
-// Helper function to upload to Cloudinary
-const uploadToCloudinary = (buffer, options = {}) => {
+  return cloudinary;
+}
+
+async function uploadDataUrlToCloudinary(dataUrl, { userId, tokenId }) {
+  const cl = initCloudinaryIfNeeded();
+  if (!cl) return null;
+
+  const result = await cl.uploader.upload(dataUrl, {
+    folder: 'kik-tokens',
+    public_id: `token_${tokenId || 'unattached'}_${Date.now()}`,
+    tags: [`user_${userId}`],
+    resource_type: 'image'
+  });
+
+  return result?.secure_url || null;
+}
+
+async function uploadBufferToCloudinary(buffer, { userId, tokenId }) {
+  const cl = initCloudinaryIfNeeded();
+  if (!cl) return null;
+
   return new Promise((resolve, reject) => {
-    const uploadStream = cloudinary.uploader.upload_stream(
+    const uploadStream = cl.uploader.upload_stream(
       {
         folder: 'kik-tokens',
-        resource_type: 'auto',
-        transformation: [
-          { width: 1024, height: 1024, crop: 'limit' },
-          { quality: 'auto:good' },
-          { fetch_format: 'auto' }
-        ],
-        ...options
+        public_id: `token_${tokenId || 'unattached'}_${Date.now()}`,
+        tags: [`user_${userId}`],
+        resource_type: 'image'
       },
       (error, result) => {
-        if (error) {
-          reject(error);
-        } else {
-          resolve(result);
-        }
+        if (error) return reject(error);
+        resolve(result?.secure_url || null);
       }
     );
+
     uploadStream.end(buffer);
   });
-};
+}
 
-// Main handler
-module.exports = async (req, res) => {
-  // Enable CORS
-  res.setHeader('Access-Control-Allow-Credentials', true);
+function enableCors(res) {
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
   res.setHeader(
     'Access-Control-Allow-Headers',
     'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version'
   );
+}
 
-  // Handle OPTIONS request
-  if (req.method === 'OPTIONS') {
-    res.status(200).end();
-    return;
+function getUserByTelegramId(telegramId) {
+  const inMemoryDB = db.getInMemoryData();
+  return Array.from(inMemoryDB.users.values()).find(u => u.telegram_id == telegramId) || null;
+}
+
+function pickUnattachedTokenId(userId) {
+  const unattached = tokenService.getUserTokens(userId, true);
+  if (!unattached || unattached.length === 0) return null;
+  return unattached[0].id;
+}
+
+async function handleJsonUpload(req, res) {
+  const { userId, photoData, isPrivate } = req.body || {};
+
+  if (!userId) {
+    return res.status(400).json({ success: false, error: 'Missing userId' });
   }
 
-  // Only accept POST requests
-  if (req.method !== 'POST') {
-    return res.status(405).json({
+  const user = getUserByTelegramId(userId);
+  if (!user) {
+    return res.status(404).json({ success: false, error: 'User not found' });
+  }
+
+  // Pick token automatically
+  const tokenId = pickUnattachedTokenId(user.id);
+  if (!tokenId) {
+    return res.status(400).json({
       success: false,
-      error: 'Method not allowed'
+      error: 'No unattached tokens available',
+      hint: 'User must claim daily tokens first'
     });
   }
 
+  // Upload image
+  let imageUrl = null;
+
+  if (photoData && isCloudinaryConfigured()) {
+    try {
+      imageUrl = await uploadDataUrlToCloudinary(photoData, { userId, tokenId });
+    } catch (e) {
+      logger.warn('Cloudinary upload (dataUrl) failed, falling back to mock URL: ' + e.message);
+    }
+  }
+
+  // Fallback for MVP
+  if (!imageUrl) {
+    const mock = await pictureService.uploadPhoto(null, user.id);
+    imageUrl = mock.imageUrl;
+  }
+
+  const attachResult = await pictureService.attachPicture(
+    tokenId,
+    imageUrl,
+    Boolean(isPrivate),
+    true // allowChangeInFuture
+  );
+
+  // Update timer for daily-claim logic
+  tokenService.updateLastPictureAttached(user.id, new Date());
+
+  return res.status(200).json({
+    success: true,
+    tokenId,
+    picture: {
+      id: attachResult.picture?.id,
+      imageUrl: attachResult.picture?.imageUrl,
+      isPrivate: attachResult.picture?.isPrivate
+    }
+  });
+}
+
+async function handleMultipartUpload(req, res) {
+  // Lazy-require multer only when needed
+  if (!multer) {
+    multer = require('multer');
+  }
+
+  const storage = multer.memoryStorage();
+  const upload = multer({
+    storage,
+    limits: { fileSize: 5 * 1024 * 1024, files: 1 }
+  }).single('photo');
+
+  await new Promise((resolve, reject) => {
+    upload(req, res, (err) => (err ? reject(err) : resolve()));
+  });
+
+  const { userId, tokenId: tokenIdFromBody, isPrivate } = req.body || {};
+
+  if (!userId) {
+    return res.status(400).json({ success: false, error: 'Missing userId' });
+  }
+
+  const user = getUserByTelegramId(userId);
+  if (!user) {
+    return res.status(404).json({ success: false, error: 'User not found' });
+  }
+
+  // Pick token automatically if not provided
+  const tokenId = tokenIdFromBody || pickUnattachedTokenId(user.id);
+  if (!tokenId) {
+    return res.status(400).json({
+      success: false,
+      error: 'No unattached tokens available',
+      hint: 'User must claim daily tokens first'
+    });
+  }
+
+  let imageUrl = null;
+
+  if (req.file && isCloudinaryConfigured()) {
+    try {
+      imageUrl = await uploadBufferToCloudinary(req.file.buffer, { userId, tokenId });
+    } catch (e) {
+      logger.warn('Cloudinary upload (buffer) failed, falling back to mock URL: ' + e.message);
+    }
+  }
+
+  if (!imageUrl) {
+    const mock = await pictureService.uploadPhoto(null, user.id);
+    imageUrl = mock.imageUrl;
+  }
+
+  const attachResult = await pictureService.attachPicture(
+    tokenId,
+    imageUrl,
+    String(isPrivate) === 'true' || isPrivate === true,
+    true
+  );
+
+  tokenService.updateLastPictureAttached(user.id, new Date());
+
+  return res.status(200).json({
+    success: true,
+    tokenId,
+    picture: {
+      id: attachResult.picture?.id,
+      imageUrl: attachResult.picture?.imageUrl,
+      isPrivate: attachResult.picture?.isPrivate
+    }
+  });
+}
+
+module.exports = async (req, res) => {
   try {
-    // Parse multipart form data
-    await new Promise((resolve, reject) => {
-      upload(req, res, (err) => {
-        if (err) {
-          if (err.code === 'LIMIT_FILE_SIZE') {
-            reject(new Error('File too large. Maximum size is 5MB.'));
-          } else if (err.message) {
-            reject(err);
-          } else {
-            reject(new Error('Failed to upload file'));
-          }
-        } else {
-          resolve();
-        }
-      });
-    });
+    enableCors(res);
 
-    // Check if file was uploaded
-    if (!req.file) {
-      return res.status(400).json({
-        success: false,
-        error: 'No file uploaded'
-      });
+    if (req.method === 'OPTIONS') {
+      return res.status(200).end();
     }
 
-    // Get userId and tokenId from form data
-    const { userId, tokenId } = req.body;
-
-    if (!userId || !tokenId) {
-      return res.status(400).json({
-        success: false,
-        error: 'Missing userId or tokenId'
-      });
+    if (req.method !== 'POST') {
+      return res.status(405).json({ success: false, error: 'Method not allowed' });
     }
 
-    // Upload to Cloudinary
-    console.log('Uploading to Cloudinary...');
-    const result = await uploadToCloudinary(req.file.buffer, {
-      public_id: `token_${tokenId}_${Date.now()}`,
-      tags: [`user_${userId}`, `token_${tokenId}`]
-    });
+    const contentType = (req.headers['content-type'] || '').toLowerCase();
 
-    console.log('Upload successful:', result.secure_url);
-
-    // Here you would normally save to database
-    // For now, we'll use in-memory storage
-    const db = require('../src/database/db');
-    
-    if (db.useInMemory) {
-      const inMemoryData = db.getInMemoryData();
-      
-      // Save picture data
-      const pictureId = `pic_${Date.now()}`;
-      inMemoryData.pictures.set(pictureId, {
-        id: pictureId,
-        tokenId: tokenId,
-        imageUrl: result.secure_url,
-        cloudinaryPublicId: result.public_id,
-        isPrivate: req.body.isPrivate === 'true',
-        uploadedAt: new Date().toISOString(),
-        userId: userId
-      });
-
-      // Update token to mark as having picture
-      if (inMemoryData.tokens.has(tokenId)) {
-        const token = inMemoryData.tokens.get(tokenId);
-        token.pictureId = pictureId;
-        token.attachedAt = new Date().toISOString();
-      }
-
-      console.log('Saved to database');
+    // JSON upload (Mini App current)
+    if (contentType.includes('application/json')) {
+      return await handleJsonUpload(req, res);
     }
 
-    // Return success response
-    res.status(200).json({
-      success: true,
-      imageUrl: result.secure_url,
-      tokenId: tokenId,
-      cloudinaryId: result.public_id,
-      format: result.format,
-      width: result.width,
-      height: result.height,
-      size: result.bytes
-    });
+    // multipart upload (optional)
+    if (contentType.includes('multipart/form-data')) {
+      return await handleMultipartUpload(req, res);
+    }
 
+    // Unsupported
+    return res.status(415).json({
+      success: false,
+      error: 'Unsupported Content-Type',
+      expected: ['application/json', 'multipart/form-data']
+    });
   } catch (error) {
-    console.error('Upload error:', error);
-
-    // Handle specific errors
-    if (error.message.includes('File too large')) {
-      return res.status(413).json({
-        success: false,
-        error: 'File too large. Maximum size is 5MB.'
-      });
-    }
-
-    if (error.message.includes('Invalid file type')) {
-      return res.status(415).json({
-        success: false,
-        error: error.message
-      });
-    }
-
-    if (error.message.includes('cloud_name')) {
-      return res.status(500).json({
-        success: false,
-        error: 'Cloudinary not configured. Please set environment variables.'
-      });
-    }
-
-    // Generic error
-    res.status(500).json({
+    logger.error('API Error - Upload Photo:', error);
+    return res.status(500).json({
       success: false,
       error: 'Failed to upload photo',
       details: error.message
